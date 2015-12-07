@@ -1,0 +1,4 @@
+!.gitignore
+/build
+/build.*
+CMakeLists.txt.user
