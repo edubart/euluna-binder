@@ -172,6 +172,16 @@ std::function<void(const Args&...)> make_mem_func_singleton(void (C::* f)(Args..
     auto mf = std::mem_fn(f);
     return [=](Args... args) mutable -> void { mf(instance, args...); };
 }
+template<typename Ret, typename C, typename... Args>
+std::function<Ret(const Args&...)> make_mem_func_singleton(Ret (C::* f)(Args...) const, C* instance) {
+    auto mf = std::mem_fn(f);
+    return [=](Args... args) mutable -> Ret { return mf(instance, args...); };
+}
+template<typename C, typename... Args>
+std::function<void(const Args&...)> make_mem_func_singleton(void (C::* f)(Args...) const, C* instance) {
+    auto mf = std::mem_fn(f);
+    return [=](Args... args) mutable -> void { mf(instance, args...); };
+}
 
 /*
 /// Bind member functions for shared classes
@@ -188,6 +198,16 @@ EulunaCppFunction bind_shared_mem_fun(Ret (FC::* f)(Args...)) {
 /// Bind member functions for singleton classes
 template<typename C, typename Ret, class FC, typename... Args>
 EulunaCppFunction bind_singleton_mem_fun(Ret (FC::*f)(Args...), C *instance) {
+    typedef typename std::tuple<typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
+    assert(instance);
+    auto lambda = make_mem_func_singleton<Ret,FC>(f, static_cast<FC*>(instance));
+    return bind_fun_specializer<typename euluna_traits::remove_const_ref<Ret>::type,
+                                decltype(lambda),
+                                Tuple>(lambda);
+}
+
+template<typename C, typename Ret, class FC, typename... Args>
+EulunaCppFunction bind_singleton_mem_fun(Ret (FC::*f)(Args...) const, C *instance) {
     typedef typename std::tuple<typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
     assert(instance);
     auto lambda = make_mem_func_singleton<Ret,FC>(f, static_cast<FC*>(instance));

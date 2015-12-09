@@ -30,9 +30,10 @@ class EulunaBinder
 {
 public:
     enum KlassType {
+        Klass_None,
+        Klass_Singleton,
         Klass_Copyable,
-        Klass_Shared,
-        Klass_Singleton
+        Klass_Shared
     };
 
 private:
@@ -42,14 +43,19 @@ private:
             name(name), base(base), type(type) { }
         std::string name;
         std::string base;
-        KlassType type;
         std::map<std::string,EulunaCppFunctionPtr> funcs;
+        KlassType type = Klass_None;
+        void *instance = nullptr;
     };
 
 public:
     static EulunaBinder& instance() {
         static EulunaBinder instance;
         return instance;
+    }
+
+    static void registerGlobalBindings(EulunaEngine* euluna) {
+        instance().registerBindings(euluna);
     }
 
     // Do the bindings
@@ -100,6 +106,12 @@ public:
         registerClass(singletonName, std::string(), Klass_Singleton);
     }
 
+    template<typename C>
+    void bindSingletonClass(const std::string& singletonName, C* instance) {
+        registerClass(singletonName, std::string(), Klass_Singleton);
+        m_klass->instance = instance;
+    }
+
     template<typename F>
     void bindClassStaticFunction(const std::string& functionName, const F& function) {
         registerClassFunction(m_klass->name, functionName, euluna_binder::bind_fun(function));
@@ -108,6 +120,13 @@ public:
     template<typename F>
     void bindGlobalFunction(const std::string& functionName, const F& function) {
         registerGlobalFunction(functionName, euluna_binder::bind_fun(function));
+    }
+
+    template<class C, typename F>
+    void bindSingletonMemberFunction(const std::string& functionName, F C::*function) {
+        C* c = static_cast<C*>(m_klass->instance);
+        assert(c);
+        registerClassFunction(m_klass->name, functionName, euluna_binder::bind_singleton_mem_fun(function, c));
     }
 
     /*
@@ -140,19 +159,28 @@ public:
     explicit EulunaBinderFunction(T&& f) { std::move(f)(); }
 };
 
-#define EULUNA_BEGIN_GLOBAL_FUNCTIONS() EulunaBinderFunction __euluna_binding_##__FILE__##_LINE ([] {
-#define EULUNA_GLOBAL(a) EulunaBinder::instance().bindGlobalFunction(#a, a);
-#define EULUNA_GLOBAL_EX(a,b) EulunaBinder::instance().bindGlobalFunction(a, b);
+// utility macro
+#define E_CONCAT_HELPER(a, b) a ## b
+#define E_CONCAT(a, b) E_CONCAT_HELPER(a, b)
+#define E_UNIQUE_NAME(str) E_CONCAT(base, __COUNTER__)
 
-#define EULUNA_BEGIN_SINGLETON(a) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSingleton(#a);
-#define EULUNA_SINGLETON_FUNC(a) EulunaBinder::instance().bindClassStaticFunction(a, b);
+// bind globals
+#define EULUNA_BEGIN_GLOBAL_FUNCTIONS() EulunaBinderFunction E_UNIQUE_NAME(__euluna_binding_)([] {
+#define EULUNA_GLOBAL(func) EulunaBinder::instance().bindGlobalFunction(#func, func);
+#define EULUNA_GLOBAL_NAMED(name,func) EulunaBinder::instance().bindGlobalFunction(name, func);
 
-#define EULUNA_BEGIN_SINGLETON_CLASS(a,b) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSingletonClass(#a, b);
-//#define EULUNA_BEGIN_SINGLETON_CLASS_EX(a,b,c) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSingletonClass<b>(a, c);
-//#define EULUNA_SINGLETON_STATIC(a,b) EulunaBinder::instance().bindClassStaticFunction(#b, &a::b);
-#define EULUNA_SINGLETON_STATIC_EX(a,b) EulunaBinder::instance().bindClassStaticFunction(a, b);
-//#define EULUNA_SINGLETON_MEMBER(a,b) EulunaBinder::instance().bindSingletonMemberFunction<a>(#b, &a::b);
-//#define EULUNA_SINGLETON_MEMBER_EX(a,b) EulunaBinder::instance().bindSingletonMemberFunction<a>(a, b);
+// bind singletons with no C++ class
+#define EULUNA_BEGIN_SINGLETON(klass) EulunaBinderFunction E_UNIQUE_NAME(__euluna_binding_)([] { EulunaBinder::instance().bindSingleton(klass);
+#define EULUNA_SINGLETON_FUNC(func) EulunaBinder::instance().bindClassStaticFunction(#func, func);
+#define EULUNA_SINGLETON_FUNC_NAMED(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
+
+// bind singletons with C++ class
+#define EULUNA_BEGIN_SINGLETON_CLASS(klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(#klass, ptr);
+#define EULUNA_BEGIN_SINGLETON_CLASS_NAMED(name,klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(name, ptr);
+#define EULUNA_SINGLETON_STATIC(klass,func) EulunaBinder::instance().bindClassStaticFunction(#func, &klass::func);
+#define EULUNA_SINGLETON_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
+#define EULUNA_SINGLETON_MEMBER(klass,func) EulunaBinder::instance().bindSingletonMemberFunction(#func, &klass::func);
+#define EULUNA_SINGLETON_MEMBER_NAMED(name,klass,func) EulunaBinder::instance().bindSingletonMemberFunction(name, &klass::func);
 
 /*
 #define EULUNA_BEGIN_SHARED_CLASS(a) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSharedClass<a>();

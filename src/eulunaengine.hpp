@@ -59,6 +59,7 @@ public:
         assert(isTable());
         pushCppFunction(function);
         setField(functionName);
+        pop();
     }
 
     // aliases
