@@ -148,7 +148,7 @@ private:
     std::string m_boo;
 };
 
-void __onDummyReferenceChange(EulunaEngine *euluna, Dummy *dummy, bool addRef, int totalRefs) {
+void __handleDummyReferenceChange(EulunaEngine *euluna, Dummy *dummy, bool addRef, int totalRefs) {
     if(totalRefs == 0) {
         euluna->releaseManagedObject(dummy); // collects all lua variables related to this object
         delete dummy; // delete C++ memory for this object
@@ -166,7 +166,7 @@ EULUNA_END
 Lua code:
 ```Lua
 local dummy = Dummy.new()
-dummy.setBoo('hello world!)
+dummy.setBoo('hello world!')
 print(dummy.getBoo()) -- hello world!
 ```
 
