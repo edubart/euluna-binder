@@ -39,14 +39,11 @@
 #include <cxxabi.h>
 #include <lua.hpp>
 
-class EulunaSharedObject;
 class EulunaInterface;
 class EulunaEngine;
 
 typedef int (*LuaCFunction) (lua_State *L);
 typedef std::function<int(EulunaInterface*)> EulunaCppFunction;
 typedef std::unique_ptr<EulunaCppFunction> EulunaCppFunctionPtr;
-#define euluna_shared_ptr std::shared_ptr
-#define euluna_shared_base std::enable_shared_from_this<EulunaSharedObject>
 
 #endif // EULUNA_PREREQS

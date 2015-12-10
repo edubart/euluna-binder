@@ -12,12 +12,12 @@ Quick Example
 ```C++
 #include "euluna.hpp"
 
-double myadd(float a, int b) {
-  return a+b;
+double mathex_lerp(double a, double b, double t) {
+    return a + (b-a)*t;
 }
 
 EULUNA_BEGIN_SINGLETON("mathex")
-EULUNA_SINGLETON_FUNC_NAMED("add", myadd)
+EULUNA_SINGLETON_FUNC_NAMED("lerp", mathex_lerp)
 EULUNA_END
 
 int main()
@@ -27,8 +27,8 @@ int main()
     // Register C++ bindings to lua
     EulunaBinder::registerGlobalBindings(&euluna);
     // Example of calling a C++ function from lua and returning its result back to C++
-    double res = euluna.runBuffer<double>("return mathex.add(1,2)");
-    // Outputs 3
+    double res = euluna.runBuffer<double>("return mathex.lerp(0,10,0.5)");
+    // Outputs 5
     std::cout << res << std::endl;
     return 0;
 }
@@ -64,18 +64,18 @@ Examples of bindings
 
 C++ code:
 ```C++
-std::string myconcat(const std::string& a, const std::string& b) {
+std::string string_concat(const std::string& a, const std::string& b) {
     return a + b;
 }
 
 EULUNA_BEGIN_GLOBAL_FUNCTIONS()
-EULUNA_GLOBAL_NAMED("concat", myconcat)
+EULUNA_GLOBAL_NAMED("concat", string_concat)
 EULUNA_END
 ```
 
 Lua code:
 ```Lua
-local str = concat("hello","world!")
+local str = concat('hello',' world!')
 print(str) -- hello world!
 ```
 
@@ -83,18 +83,21 @@ print(str) -- hello world!
 
 C++ code:
 ```C++
+namespace stringutil {
+std::string concat(const std::string& a, const std::string& b) {
+    return a + b;
+}
+}
 
-#include <cstdio>
-
-EULUNA_BEGIN_SINGLETON("cio")
-EULUNA_SINGLETON_FUNC_NAMED("puts", std::puts);
-EULUNA_SINGLETON_FUNC_NAMED("gets", std::gets);
+EULUNA_BEGIN_SINGLETON("stringutil")
+EULUNA_SINGLETON_FUNC_NAMED("concat", stringutil::concat);
 EULUNA_END
 ```
 
 Lua code:
 ```Lua
-cio.puts("hello world!") -- hello world!
+local str = stringutil.concat('hello',' world!')
+print(str) -- hello world!
 ```
 
 ### Singleton
@@ -108,12 +111,12 @@ public:
         return &instance;
     }
 
-    void setBoo(const std::string& foo) { m_boo = boo; }
+    void setBoo(const std::string& boo) { m_boo = boo; }
     std::string getBoo() const { return m_boo; }
 
 private:
     std::string m_boo;
-}
+};
 
 EULUNA_BEGIN_SINGLETON_CLASS_NAMED("foo", Foo, Foo::instance())
 EULUNA_SINGLETON_MEMBER(Foo, setBoo)
@@ -138,25 +141,25 @@ C++ code:
 
 class Dummy {
 public:
-    Dummy() { }
-    ~Dummy() { }
-
-    void setBoo(const std::string& foo) { m_boo = boo; }
+    void setBoo(const std::string& boo) { m_boo = boo; }
     std::string getBoo() const { return m_boo; }
 
 private:
     std::string m_boo;
+};
+
+void __onDummyReferenceChange(EulunaEngine *euluna, Dummy *dummy, bool addRef, int totalRefs) {
+    if(totalRefs == 0) {
+        euluna->releaseManagedObject(dummy); // collects all lua variables related to this object
+        delete dummy; // delete C++ memory for this object
+    }
 }
 
-EULUNA_BEGIN_MANAGED_CLASS(Dummy, []((Euluna *euluna, Dummy *dummy, int totalRefs, int refChange) {
-    if(totalRefs == 0) {
-        delete dummy; // delete C++ memory for this object
-        euluna->collectManagedObject(dummy); // collects all lua variables related to this object
-    }
-})
-EULUNA_MANAGED_STATIC_NAMED("new", []{ return new Dummy(); })
+EULUNA_BEGIN_MANAGED_CLASS(Dummy)
+EULUNA_MANAGED_REFERENCE_HANDLER(__handleDummyReferenceChange)
+EULUNA_MANAGED_STATIC_NAMED("new", []{ return new Dummy; })
 EULUNA_MANAGED_MEMBER(Dummy, setBoo)
-EULUNA_MANAGED_MEMBER(Dummy, setFoo)
+EULUNA_MANAGED_MEMBER(Dummy, getBoo)
 EULUNA_END
 ```
 

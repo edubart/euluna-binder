@@ -23,8 +23,14 @@
 #ifndef EULUNAENGINE_HPP
 #define EULUNAENGINE_HPP
 
-#include "eulunaprereqs.hpp"
 #include "eulunainterface.hpp"
+
+#include <unordered_map>
+
+struct EulunaObject {
+    int fieldsTableRef = -1;
+    int refs = 1;
+};
 
 // Euluna engine
 class EulunaEngine : public EulunaInterface {
@@ -66,7 +72,18 @@ public:
     template<typename R>
     R runBuffer(const std::string& buffer, const std::string& source = "") { return polymorphicSafeDoBuffer<R>(buffer, source); }
 
+    void useObject(void *object) {
+        m_objects[object] = EulunaObject();
+    }
 
+    void releaseManagedObject(void *object) {
+        auto it = m_objects.find(object);
+        assert(it != m_objects.end());
+        m_objects.erase(it);
+    }
+
+private:
+    std::unordered_map<void*,EulunaObject> m_objects;
 };
 
 #endif // EULUNAENGINE_HPP

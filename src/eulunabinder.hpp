@@ -32,8 +32,7 @@ public:
     enum KlassType {
         Klass_None,
         Klass_Singleton,
-        Klass_Copyable,
-        Klass_Shared
+        Klass_Managed
     };
 
 private:
@@ -95,13 +94,6 @@ public:
 
 
     // Binders
-    /*
-    template<class C>
-    void bindSharedClass() {
-        static_assert(std::is_base_of<EulunaSharedObject, C>::value, "Shared classes must be derived from EulunaSharedObject.");
-        registerClass(euluna_tools::demangle_type<C>(), std::string(), Klass_Shared);
-    }
-    */
     void bindSingleton(const std::string& singletonName) {
         registerClass(singletonName, std::string(), Klass_Singleton);
     }
@@ -110,6 +102,11 @@ public:
     void bindSingletonClass(const std::string& singletonName, C* instance) {
         registerClass(singletonName, std::string(), Klass_Singleton);
         m_klass->instance = instance;
+    }
+
+    template<typename C>
+    void bindManagedClass(const std::string& managedName) {
+        registerClass(managedName, std::string(), Klass_Managed);
     }
 
     template<typename F>
@@ -129,22 +126,15 @@ public:
         registerClassFunction(m_klass->name, functionName, euluna_binder::bind_singleton_mem_fun(function, c));
     }
 
-    /*
-    template<class C, typename F, class FC>
-    void bindClassMemberFunction(const std::string& functionName, F FC::*function) {
-        registerClassFunction(euluna_tools::demangle_type<C>(),
-                              functionName,
-                              euluna_binder::bind_shared_mem_fun<C>(function));
+    template<class C, typename F>
+    void bindManagedMemberFunction(const std::string& functionName, F C::*function) {
+        //TODO
     }
-    */
 
-    // bindClassStaticFunction
-    // bindClassMemberFunction
-    // bindClassConstructorFunction
-    // bindClassDestructorFunction
-    // bindGlobalFunction
-    // bindSingleton
-    // bindSingletonFunction
+    template<typename F>
+    void bindManagedMemberFunction(const std::string& functionName, const F& function) {
+        //TODO
+    }
 
 
 private:
@@ -178,20 +168,24 @@ public:
 #define EULUNA_BEGIN_SINGLETON_CLASS(klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(#klass, ptr);
 #define EULUNA_BEGIN_SINGLETON_CLASS_NAMED(name,klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(name, ptr);
 #define EULUNA_SINGLETON_STATIC(klass,func) EulunaBinder::instance().bindClassStaticFunction(#func, &klass::func);
-#define EULUNA_SINGLETON_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
+#define EULUNA_SINGLETON_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, &klass::func);
+#define EULUNA_SINGLETON_STATIC_NAMED_EX(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
 #define EULUNA_SINGLETON_MEMBER(klass,func) EulunaBinder::instance().bindSingletonMemberFunction(#func, &klass::func);
 #define EULUNA_SINGLETON_MEMBER_NAMED(name,klass,func) EulunaBinder::instance().bindSingletonMemberFunction(name, &klass::func);
+#define EULUNA_SINGLETON_MEMBER_NAMED_EX(name,func) EulunaBinder::instance().bindSingletonMemberFunction(name, func);
 
-/*
-#define EULUNA_BEGIN_SHARED_CLASS(a) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSharedClass<a>();
-#define EULUNA_SHARED_STATIC(a,b) EulunaBinder::instance().bindClassStaticFunction<a>(#b, &a::b);
-#define EULUNA_SHARED_MEMBER(a,b) EulunaBinder::instance().bindSharedMemberFunction<a>(#b, &a::b);
+// bind managed C++ classes
+#define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindManagedClass<klass>(#klass);
+#define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindManagedClass<klass>(name);
+#define EULUNA_MANAGED_REFERENCE_HANDLER(handler) //TODO
+#define EULUNA_MANAGED_STATIC(klass,func) EulunaBinder::instance().bindClassStaticFunction(#func, &klass::func);
+#define EULUNA_MANAGED_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, &klass::func);
+#define EULUNA_MANAGED_STATIC_NAMED_EX(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
+#define EULUNA_MANAGED_MEMBER(klass,func) EulunaBinder::instance().bindManagedMemberFunction<klass>(#func, &klass::func);
+#define EULUNA_MANAGED_MEMBER_NAMED(name,klass,func) EulunaBinder::instance().bindManagedMemberFunction<klass>(name, &klass::func);
+#define EULUNA_MANAGED_MEMBER_NAMED_EX(name,func) EulunaBinder::instance().bindManagedMemberFunction(name, func);
 
-#define EULUNA_BEGIN_COPYABLE_CLASS(a) EulunaBinderFunction __euluna_binding_##a([] { EulunaBinder::instance().bindSharedClass<a>();
-#define EULUNA_COPYABLE_STATIC(a,b) EulunaBinder::instance().bindClassStaticFunction<a>(#b, &a::b);
-#define EULUNA_COPYABLE_MEMBER(a,b) EulunaBinder::instance().bindSharedMemberFunction<a>(#b, &a::b);
-*/
-
+// bind ending
 #define EULUNA_END });
 
 #endif // EULUNABINDER_HPP

@@ -27,7 +27,6 @@
 #include "eulunatools.hpp"
 #include "eulunabinder.hpp"
 #include "eulunaexception.hpp"
-//#include "eulunasharedobject.hpp"
 #include "eulunainterface.hpp"
 #include "eulunacaster.hpp"
 #include "eulunaengine.hpp"
