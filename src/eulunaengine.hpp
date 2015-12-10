@@ -25,8 +25,6 @@
 
 #include "eulunainterface.hpp"
 
-#include <unordered_map>
-
 struct EulunaObject {
     int fieldsTableRef = -1;
     int refs = 1;

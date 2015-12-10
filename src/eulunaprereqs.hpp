@@ -34,6 +34,7 @@
 #include <memory>
 #include <tuple>
 #include <map>
+#include <unordered_map>
 #include <type_traits>
 
 #include <cxxabi.h>

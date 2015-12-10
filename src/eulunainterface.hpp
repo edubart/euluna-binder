@@ -104,6 +104,7 @@ public:
     // state manipulation
     lua_State* newThread() { return lua_newthread(L); }
     lua_State *luaState() { return L; }
+    void setLuaState(lua_State *state) { L = state; m_ownState = false; }
 
     // basic stack manipulation
     int getTop() const { return lua_gettop(L); }
