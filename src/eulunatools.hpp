@@ -55,6 +55,8 @@ std::string demangle_type() { return demangle_name(typeid(T).name()); }
 
 template<typename T>
 std::string demangle_type(T& t) { return demangle_name(typeid(*(&t)).name()); }
+template<typename T>
+std::string demangle_type(T* t) { return demangle_name(typeid(*t).name()); }
 
 // Sprintf cast used for snprintf
 template<typename T>

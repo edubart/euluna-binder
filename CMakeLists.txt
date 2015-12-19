@@ -6,4 +6,5 @@ include_directories(${GTEST_INCLUDE_DIRS} ${CMAKE_CURRENT_LIST_DIR}/src)
 add_executable(tests
 tests/tests.cpp)
 target_link_libraries(tests ${GTEST_BOTH_LIBRARIES} lua)
+add_custom_target(run COMMAND tests DEPENDS tests WORKING_DIRECTORY ${CMAKE_PROJECT_DIR})
 add_test(AllEulunaTests tests)

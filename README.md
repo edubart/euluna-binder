@@ -9,7 +9,7 @@ and straightforward way of binding your classes from C++ to Lua.
 Quick Example
 --------------------
 
-```C++
+```cpp
 #include "euluna.hpp"
 
 double mathex_lerp(double a, double b, double t) {
@@ -17,8 +17,8 @@ double mathex_lerp(double a, double b, double t) {
 }
 
 EULUNA_BEGIN_SINGLETON("mathex")
-EULUNA_SINGLETON_FUNC_NAMED("lerp", mathex_lerp)
-EULUNA_END
+EULUNA_FUNC_NAMED("lerp", mathex_lerp)
+EULUNA_END()
 
 int main()
 {
@@ -63,18 +63,18 @@ Examples of bindings
 ### Global functions
 
 C++ code:
-```C++
+```cpp
 std::string string_concat(const std::string& a, const std::string& b) {
     return a + b;
 }
 
 EULUNA_BEGIN_GLOBAL_FUNCTIONS()
-EULUNA_GLOBAL_NAMED("concat", string_concat)
-EULUNA_END
+EULUNA_FUNC_NAMED("concat", string_concat)
+EULUNA_END()
 ```
 
 Lua code:
-```Lua
+```lua
 local str = concat('hello',' world!')
 print(str) -- hello world!
 ```
@@ -91,11 +91,11 @@ std::string concat(const std::string& a, const std::string& b) {
 
 EULUNA_BEGIN_SINGLETON("stringutil")
 EULUNA_SINGLETON_FUNC_NAMED("concat", stringutil::concat);
-EULUNA_END
+EULUNA_END()
 ```
 
 Lua code:
-```Lua
+```lua
 local str = stringutil.concat('hello',' world!')
 print(str) -- hello world!
 ```
@@ -103,7 +103,7 @@ print(str) -- hello world!
 ### Singleton
 
 C++ code:
-```C++
+```cpp
 class Foo {
 public:
     static Foo* instance() {
@@ -119,13 +119,13 @@ private:
 };
 
 EULUNA_BEGIN_SINGLETON_CLASS_NAMED("foo", Foo, Foo::instance())
-EULUNA_SINGLETON_MEMBER(Foo, setBoo)
-EULUNA_SINGLETON_MEMBER(Foo, getBoo)
-EULUNA_END
+EULUNA_CLASS_MEMBER(Foo, setBoo)
+EULUNA_CLASS_MEMBER(Foo, getBoo)
+EULUNA_END()
 ```
 
 Lua code:
-```Lua
+```lua
 foo.setBoo('hello world!')
 print(foo.getBoo()) -- hello world!
 ```
@@ -137,7 +137,7 @@ the user is reponsible for mantaining the class memory valid
 and collecting its C++/lua memory.
 
 C++ code:
-```C++
+```cpp
 
 class Dummy {
 public:
@@ -156,15 +156,15 @@ void __handleDummyReferenceChange(EulunaEngine *euluna, Dummy *dummy, bool addRe
 }
 
 EULUNA_BEGIN_MANAGED_CLASS(Dummy)
-EULUNA_MANAGED_REFERENCE_HANDLER(__handleDummyReferenceChange)
-EULUNA_MANAGED_STATIC_NAMED("new", []{ return new Dummy; })
-EULUNA_MANAGED_MEMBER(Dummy, setBoo)
-EULUNA_MANAGED_MEMBER(Dummy, getBoo)
-EULUNA_END
+EULUNA_CLASS_REFERENCE_HANDLER(__handleDummyReferenceChange)
+EULUNA_CLASS_STATIC_NAMED("new", []{ return new Dummy; })
+EULUNA_CLASS_MEMBER(Dummy, setBoo)
+EULUNA_CLASS_MEMBER(Dummy, getBoo)
+EULUNA_END()
 ```
 
 Lua code:
-```Lua
+```lua
 local dummy = Dummy.new()
 dummy.setBoo('hello world!')
 print(dummy.getBoo()) -- hello world!

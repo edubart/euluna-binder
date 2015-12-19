@@ -249,6 +249,9 @@ public:
     void getMetatable(int index = -1) { lua_getmetatable(L, index); }
     void getGlobal(const char* key) { lua_getglobal(L, key); }
     void getGlobal(const std::string& key) {  lua_getglobal(L, key.c_str()); }
+    void getRegistry() { lua_rawget(L, LUA_REGISTRYINDEX); }
+    void getRegistryField(const std::string& key) {  lua_getfield(L, LUA_REGISTRYINDEX, key.c_str()); }
+    void getRegistryField(const char* key) { lua_getfield(L, LUA_REGISTRYINDEX, key); }
     void createTable(int narr, int nrec) { lua_createtable(L, narr, nrec); }
     void newTable() { lua_newtable(L); }
     void* newUserdata(size_t size) { return lua_newuserdata(L, size); }
@@ -263,6 +266,9 @@ public:
     void setMetatable(int index = -2) { lua_setmetatable(L, index); }
     void setGlobal(const char* key) { lua_setglobal(L, key); }
     void setGlobal(const std::string& key) { lua_setglobal(L, key.c_str()); }
+    void setRegistry() { lua_rawset(L, LUA_REGISTRYINDEX); }
+    void setRegistryField(const char* key) { lua_setfield(L, LUA_REGISTRYINDEX, key); }
+    void setRegistryField(const std::string& key) { lua_setfield(L, LUA_REGISTRYINDEX, key.c_str()); }
 
     // load and call
     int pcall(int numArgs = 0, int numRets = 0, int errorFuncIndex = 0) { return lua_pcall(L, numArgs, numRets, errorFuncIndex); }
@@ -288,6 +294,28 @@ public:
     const char* typeName(int type) { return lua_typename(L, type); }
     void traceback(const char* msg, int level = 0) { luaL_traceback(L, L, msg, level); }
     void traceback(const std::string& msg, int level = 0) { luaL_traceback(L, L, msg.c_str(), level); }
+    void getOrCreateGlobalTable(const std::string& name) {
+        getGlobal(name);
+        if(isNil()) {
+            pop();
+            newTable();
+            pushValue();
+            setGlobal(name);
+        } else {
+            assert(isTable());
+        }
+    }
+    void getOrCreateRegistryTable(const std::string& name) {
+        getRegistryField(name);
+        if(isNil()) {
+            pop();
+            newTable();
+            pushValue();
+            setRegistryField(name);
+        } else {
+            assert(isTable());
+        }
+    }
 
     // pop functions
     void pop(int n = 1) { lua_pop(L, n); }
@@ -304,6 +332,28 @@ public:
     int ref() { return luaL_ref(L, LUA_REGISTRYINDEX); }
     void unref(int ref) { luaL_unref(L, LUA_REGISTRYINDEX, ref); }
     void getRef(int ref) { lua_rawgeti(L, LUA_REGISTRYINDEX, ref); }
+
+
+    // object related
+    template<class C>
+    void useObject(C* instance);
+    template<class C>
+    void releaseObject(C* instance);
+    template<class C>
+    void pushObject(C *instance);
+        useObject(ptr);
+        new(newUserdata(sizeof))
+        pushL
+    }
+
+    EulunaObject* toObject(int index = -1) {
+        if(!isUserdata(index))
+          return nullptr;
+        pushValue(index);
+        getRegistry();
+        EulunaObject *object = static_cast<EulunaObject*>(toUserdata());
+        return object;
+    }
 
     // polymorphic
     template<typename T, typename... Args>
@@ -369,5 +419,46 @@ protected:
 };
 
 #include "eulunacaster.hpp"
+#include "eulunaobject.hpp"
+
+template<class C>
+EulunaObject *EulunaInterface::useObject(C* instance) {
+    assert(instance);
+    pushLightUserdata(instance);
+    getRegistry();
+    EulunaObject *obj;
+    if(isNil()) {
+        pushLightUserdata(instance);
+        obj = new EulunaObject();
+        pushLightUserdata(obj);
+        setRegistry();
+    } else
+        obj = static_cast<EulunaObject*>(popUserdata());
+    obj->lua_ref(this);
+    return obj;
+}
+
+template<class C>
+void EulunaInterface::releaseObject(C* instance) {
+    assert(instance);
+    pushLightUserdata(instance);
+    getRegistry();
+    EulunaObject *obj = static_cast<EulunaObject*>(popUserdata());
+    assert(obj);
+    obj->lua_release(this);
+    pushLightUserdata(instance);
+    pushNil();
+    setRegistry();
+    delete obj;
+}
+
+template<class C>
+void EulunaInterface::pushObject(C *instance);
+    EulunaObject *obj = useObject(ptr);
+    new(newUserdata(sizeof(void*))) void*(instance);
+    obj->lua_getMetatable(this, euluna_tools::demangle_type(*instance));
+    assert(!isNil());
+    setMetatable();
+}
 
 #endif // EULUNAINTERFACE_HPP

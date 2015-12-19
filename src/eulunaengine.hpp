@@ -25,11 +25,6 @@
 
 #include "eulunainterface.hpp"
 
-struct EulunaObject {
-    int fieldsTableRef = -1;
-    int refs = 1;
-};
-
 // Euluna engine
 class EulunaEngine : public EulunaInterface {
 public:
@@ -42,15 +37,102 @@ public:
     }
 
     void registerSingletonClass(const std::string& className) {
-        getGlobal(className);
-        if(isNil()) {
-            pop();
-            newTable();
-            setGlobal(className);
-        } else {
-            assert(isTable());
-            pop();
+        getOrCreateGlobalTable(className);
+        pop(1);
+    }
+
+    void registerManagedClass(const std::string& className, const std::string& baseClass = std::string()) {
+        // creates the class table (that it's also the class methods table)
+        getOrCreateGlobalTable(className);
+        const int klass = getTop();
+
+        // creates the class metatable
+        getOrCreateRegistryTable(className + "_mt");
+        int klass_mt = getTop();
+
+        // save reference for the methods table in the metamethods table for faster access
+        pushValue(klass);
+        rawSeti(1, klass_mt);
+
+        // get event
+        pushCppFunction([](EulunaInterface *lua) {
+            // stack: obj, key
+            EulunaObject* obj = lua->toObject(-2);
+            std::string key = lua->toString(-1);
+            assert(obj);
+
+            // if the field for this key exists, returns it
+            obj->lua_rawGet(lua);
+            if(!lua->isNil()) {
+                lua->remove(-2); // removes the obj
+                // field value is on the stack
+                return 1;
+            }
+            lua->pop(); // pops the nil field
+
+            // pushes the method assigned by this key
+            lua->getMetatable();  // pushes obj metatable
+            lua->rawGeti(1); // push obj methods table
+            lua->getField(key); // pushes obj method
+            lua->insert(-4); // move value to bottom
+            lua->pop(3); // pop obj methods, obj metatable, obj
+
+            // the result value is on the stack
+            return 1;
+        });
+        setField("__index", klass_mt);
+
+        // set event
+        pushCppFunction([](EulunaInterface *lua) {
+            // stack: obj, key, value
+            EulunaObject *obj = lua->toObject(-3);
+            assert(obj);
+            lua->remove(-3);
+            obj->lua_rawSet(lua);
+            return 0;
+        });
+        setField("__newindex", klass_mt);
+
+        // equal event
+        pushCppFunction([](EulunaInterface *lua) {
+            // stack: obj1, obj2
+            void *objA = lua->toUserdata(-2);
+            void *objB = lua->toUserdata(-1);
+            bool ret = (objA == objB);
+            lua->pop(2);
+            lua->pushBoolean(ret);
+            return 1;
+        });
+        setField("__eq", klass_mt);
+
+        // collect event
+        pushCppFunction([](EulunaInterface *lua) {
+            // gets object pointer
+            EulunaObject* obj = lua->toObject(-1);
+            lua->pop(1);
+            assert(obj);
+            // resets pointer to decrease object use count
+            obj->lua_unref(lua);
+            return 0;
+        });
+        setField("__gc", klass_mt);
+
+        // redirect methods to the base class ones
+        if(!className.empty()) {
+          // the following code is what create classes hierarchy for lua, by reproducing:
+          // DerivedClass = { __index = BaseClass }
+
+          // redirect the class methods to the base methods
+          pushValue(klass);
+          newTable();
+          getOrCreateGlobalTable(baseClass);
+          setField("__index");
+          setMetatable();
+          pop();
         }
+
+        // pops klass, klass_mt
+        pop(2);
     }
 
     void registerGlobalFunction(const std::string& functionName, EulunaCppFunction* function) {
@@ -69,16 +151,6 @@ public:
     // aliases
     template<typename R>
     R runBuffer(const std::string& buffer, const std::string& source = "") { return polymorphicSafeDoBuffer<R>(buffer, source); }
-
-    void useObject(void *object) {
-        m_objects[object] = EulunaObject();
-    }
-
-    void releaseManagedObject(void *object) {
-        auto it = m_objects.find(object);
-        assert(it != m_objects.end());
-        m_objects.erase(it);
-    }
 
 private:
     std::unordered_map<void*,EulunaObject> m_objects;

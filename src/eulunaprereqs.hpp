@@ -42,6 +42,7 @@
 
 class EulunaInterface;
 class EulunaEngine;
+class EulunaObject;
 
 typedef int (*LuaCFunction) (lua_State *L);
 typedef std::function<int(EulunaInterface*)> EulunaCppFunction;

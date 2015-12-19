@@ -28,23 +28,98 @@
 
 class EulunaBinder
 {
-public:
-    enum KlassType {
-        Klass_None,
-        Klass_Singleton,
-        Klass_Managed
+    class Binder {
+    public:
+        virtual ~Binder() {}
+        virtual void registerBindings(EulunaEngine *euluna) = 0;
     };
 
-private:
-    struct Klass {
-        Klass() { }
-        Klass(const std::string& name, const std::string& base, KlassType type) :
-            name(name), base(base), type(type) { }
-        std::string name;
-        std::string base;
-        std::map<std::string,EulunaCppFunctionPtr> funcs;
-        KlassType type = Klass_None;
-        void *instance = nullptr;
+    class BinderGlobals : public Binder {
+        std::map<std::string,EulunaCppFunctionPtr> m_functions;
+    public:
+        explicit BinderGlobals() {}
+        template<typename F>
+        BinderGlobals& def(const std::string& functionName, F function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
+            return *this;
+        };
+        virtual void registerBindings(EulunaEngine *euluna) {
+            for(auto& it : m_functions)
+                euluna->registerGlobalFunction(it.first, it.second.get());
+        }
+    };
+
+    class BinderSingleton : public Binder {
+        std::string m_name;
+        std::map<std::string,EulunaCppFunctionPtr> m_functions;
+    public:
+        explicit BinderSingleton(const std::string& name) : m_name(name) { }
+        template<typename F>
+        BinderSingleton& def(const std::string& functionName, F function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
+            return *this;
+        };
+        virtual void registerBindings(EulunaEngine *euluna) {
+            euluna->registerSingletonClass(m_name);
+            for(auto& it : m_functions)
+                euluna->registerClassFunction(m_name, it.first, it.second.get());
+        }
+    };
+
+    class BinderSingletonClass : public Binder {
+        std::string m_name;
+        void *m_instance = nullptr;
+        std::map<std::string,EulunaCppFunctionPtr> m_functions;
+    public:
+        explicit BinderSingletonClass(const std::string& name, void* instance) : m_name(name), m_instance(instance) {
+            assert(instance);
+        }
+        template<typename F>
+        BinderSingletonClass& defStatic(const std::string& functionName, F&& function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
+            return *this;
+        };
+
+        template<class C, typename F>
+        BinderSingletonClass& def(const std::string& functionName, F C::*function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_singleton_mem_fun(std::forward<decltype(function)>(function), static_cast<C*>(m_instance))));
+            return *this;
+        }
+        virtual void registerBindings(EulunaEngine *euluna) {
+            euluna->registerSingletonClass(m_name);
+            for(auto& it : m_functions)
+                euluna->registerClassFunction(m_name, it.first, it.second.get());
+        }
+    };
+
+    class BinderManagedClass : public Binder {
+        std::string m_name;
+        std::map<std::string,EulunaCppFunctionPtr> m_functions;
+    public:
+        explicit BinderManagedClass(const std::string& name) : m_name(name) {
+        }
+        template<typename F>
+        BinderManagedClass& defStatic(const std::string& functionName, F&& function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
+            return *this;
+        };
+
+        template<class C, typename F>
+        BinderManagedClass& def(const std::string& functionName, F C::*function) {
+            assert(m_functions.find(functionName) == m_functions.end());
+            //m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_mem_fun(std::forward<decltype(function)>(function))));
+            return *this;
+        }
+        virtual void registerBindings(EulunaEngine *euluna) {
+            euluna->registerManagedClass(m_name);
+            for(auto& it : m_functions)
+                euluna->registerClassFunction(m_name, it.first, it.second.get());
+        }
     };
 
 public:
@@ -59,133 +134,76 @@ public:
 
     // Do the bindings
     void registerBindings(EulunaEngine* euluna) {
-        for(auto& it : m_globalFunctions)
-            euluna->registerGlobalFunction(it.first, it.second.get());
-        for(auto& kit : m_klasses) {
-            Klass& klass = kit.second;
-            if(klass.type == Klass_Singleton) {
-                euluna->registerSingletonClass(klass.name);
-                for(auto& fit : klass.funcs)
-                    euluna->registerClassFunction(klass.name, fit.first, fit.second.get());
-            }
-        }
+        for(auto& binder : m_binders)
+            binder->registerBindings(euluna);
     }
-
-    // Registers
-    void registerClass(const std::string& className,
-                       const std::string& classBase,
-                       KlassType classType) {
-        assert(m_klasses.find(className) == m_klasses.end());
-        m_klasses[className] = Klass(className,classBase,classType);
-        m_klass = &m_klasses[className];
-    }
-    void registerClassFunction(const std::string& className,
-                               const std::string& functionName,
-                               EulunaCppFunction function) {
-        assert(m_klass && m_klass->name == className);
-        assert(m_klass->funcs.find(functionName) == m_klass->funcs.end());
-        m_klass->funcs[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(std::move(function)));
-    }
-    void registerGlobalFunction(const std::string& functionName,
-                                EulunaCppFunction function) {
-         assert(m_globalFunctions.find(functionName) == m_globalFunctions.end());
-         m_globalFunctions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(std::move(function)));
-     }
-
 
     // Binders
-    void bindSingleton(const std::string& singletonName) {
-        registerClass(singletonName, std::string(), Klass_Singleton);
+    EulunaBinder::BinderGlobals& globals() {
+        auto ret = new BinderGlobals();
+        m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
+        return *ret;
+    }
+    EulunaBinder::BinderSingleton& singleton(const std::string& name) {
+        auto ret = new BinderSingleton(name);
+        m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
+        return *ret;
+    }
+    template<class C>
+    EulunaBinder::BinderSingletonClass& singletonClass(const std::string& name, C *instance) {
+        auto ret = new BinderSingletonClass(name, static_cast<C*>(instance));
+        m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
+        return *ret;
     }
 
-    template<typename C>
-    void bindSingletonClass(const std::string& singletonName, C* instance) {
-        registerClass(singletonName, std::string(), Klass_Singleton);
-        m_klass->instance = instance;
+    template<class C>
+    EulunaBinder::BinderManagedClass& managedClass(const std::string& name) {
+        auto ret = new BinderManagedClass(name);
+        m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
+        return *ret;
     }
-
-    template<typename C>
-    void bindManagedClass(const std::string& managedName) {
-        registerClass(managedName, std::string(), Klass_Managed);
-    }
-
-    template<typename F>
-    void bindClassStaticFunction(const std::string& functionName, const F& function) {
-        registerClassFunction(m_klass->name, functionName, euluna_binder::bind_fun(function));
-    }
-
-    template<typename F>
-    void bindGlobalFunction(const std::string& functionName, const F& function) {
-        registerGlobalFunction(functionName, euluna_binder::bind_fun(function));
-    }
-
-    template<class C, typename F>
-    void bindSingletonMemberFunction(const std::string& functionName, F C::*function) {
-        C* c = static_cast<C*>(m_klass->instance);
-        assert(c);
-        registerClassFunction(m_klass->name, functionName, euluna_binder::bind_singleton_mem_fun(function, c));
-    }
-
-    template<class C, typename F>
-    void bindManagedMemberFunction(const std::string& functionName, F C::*function) {
-        //TODO
-    }
-
-    template<typename F>
-    void bindManagedMemberFunction(const std::string& functionName, const F& function) {
-        //TODO
-    }
-
 
 private:
-    std::map<std::string, Klass> m_klasses;
-    Klass *m_klass = nullptr;
-    std::map<std::string,EulunaCppFunctionPtr> m_globalFunctions;
+    std::vector<std::unique_ptr<Binder>> m_binders;
 };
 
-class EulunaBinderFunction {
+class EulunaAutoBinder {
 public:
     template<typename T>
-    explicit EulunaBinderFunction(T&& f) { std::move(f)(); }
+    explicit EulunaAutoBinder(T&& f) { std::move(f)(); }
 };
 
 // utility macro
-#define E_CONCAT_HELPER(a, b) a ## b
-#define E_CONCAT(a, b) E_CONCAT_HELPER(a, b)
-#define E_UNIQUE_NAME(str) E_CONCAT(base, __COUNTER__)
+#define EULUNA_AUTO_BIND(name) void __euluna_bind_##name(); \
+                          EulunaAutoBinder __euluna_bindings_##name([] { __euluna_bind_##name(); }); \
+                          void __euluna_bind_##name()
+// bind functions
+#define EULUNA_FUNC(func) .def(#func, func)
+#define EULUNA_FUNC_NAMED(name,func) .def(name, func)
+#define EULUNA_CLASS_STATIC(klass,func) .defStatic(#func, &klass::func)
+#define EULUNA_CLASS_STATIC_NAMED(name,klass,func) .defStatic(name, &klass::func)
+#define EULUNA_CLASS_STATIC_NAMED_EX(name,func) .defStatic(name, func)
+#define EULUNA_CLASS_MEMBER(klass,func) .def(#func, &klass::func)
+#define EULUNA_CLASS_MEMBER_NAMED(name,klass,func) .def(name, &klass::func)
+#define EULUNA_CLASS_MEMBER_NAMED_EX(name,func) .def(name, func)
 
 // bind globals
-#define EULUNA_BEGIN_GLOBAL_FUNCTIONS() EulunaBinderFunction E_UNIQUE_NAME(__euluna_binding_)([] {
-#define EULUNA_GLOBAL(func) EulunaBinder::instance().bindGlobalFunction(#func, func);
-#define EULUNA_GLOBAL_NAMED(name,func) EulunaBinder::instance().bindGlobalFunction(name, func);
+#define EULUNA_BEGIN_GLOBAL_FUNCTIONS(name) EulunaAutoBinder __euluna_bindings_##name([] { EulunaBinder::instance().globals()
 
 // bind singletons with no C++ class
-#define EULUNA_BEGIN_SINGLETON(klass) EulunaBinderFunction E_UNIQUE_NAME(__euluna_binding_)([] { EulunaBinder::instance().bindSingleton(klass);
-#define EULUNA_SINGLETON_FUNC(func) EulunaBinder::instance().bindClassStaticFunction(#func, func);
-#define EULUNA_SINGLETON_FUNC_NAMED(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
+#define EULUNA_BEGIN_SINGLETON(klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().singleton(#klass)
+#define EULUNA_BEGIN_SINGLETON_NAMED(name,klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().singleton(name)
 
 // bind singletons with C++ class
-#define EULUNA_BEGIN_SINGLETON_CLASS(klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(#klass, ptr);
-#define EULUNA_BEGIN_SINGLETON_CLASS_NAMED(name,klass,ptr) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindSingletonClass<klass>(name, ptr);
-#define EULUNA_SINGLETON_STATIC(klass,func) EulunaBinder::instance().bindClassStaticFunction(#func, &klass::func);
-#define EULUNA_SINGLETON_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, &klass::func);
-#define EULUNA_SINGLETON_STATIC_NAMED_EX(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
-#define EULUNA_SINGLETON_MEMBER(klass,func) EulunaBinder::instance().bindSingletonMemberFunction(#func, &klass::func);
-#define EULUNA_SINGLETON_MEMBER_NAMED(name,klass,func) EulunaBinder::instance().bindSingletonMemberFunction(name, &klass::func);
-#define EULUNA_SINGLETON_MEMBER_NAMED_EX(name,func) EulunaBinder::instance().bindSingletonMemberFunction(name, func);
+#define EULUNA_BEGIN_SINGLETON_CLASS(klass,ptr) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().singletonClass(#klass, ptr)
+#define EULUNA_BEGIN_SINGLETON_CLASS_NAMED(name,klass,ptr) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().singletonClass(name, ptr)
 
 // bind managed C++ classes
-#define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindManagedClass<klass>(#klass);
-#define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaBinderFunction __euluna_binding_##klass([] { EulunaBinder::instance().bindManagedClass<klass>(name);
-#define EULUNA_MANAGED_REFERENCE_HANDLER(handler) //TODO
-#define EULUNA_MANAGED_STATIC(klass,func) EulunaBinder::instance().bindClassStaticFunction(#func, &klass::func);
-#define EULUNA_MANAGED_STATIC_NAMED(name,klass,func) EulunaBinder::instance().bindClassStaticFunction(name, &klass::func);
-#define EULUNA_MANAGED_STATIC_NAMED_EX(name,func) EulunaBinder::instance().bindClassStaticFunction(name, func);
-#define EULUNA_MANAGED_MEMBER(klass,func) EulunaBinder::instance().bindManagedMemberFunction<klass>(#func, &klass::func);
-#define EULUNA_MANAGED_MEMBER_NAMED(name,klass,func) EulunaBinder::instance().bindManagedMemberFunction<klass>(name, &klass::func);
-#define EULUNA_MANAGED_MEMBER_NAMED_EX(name,func) EulunaBinder::instance().bindManagedMemberFunction(name, func);
+#define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(#klass)
+#define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(name)
+#define EULUNA_CLASS_REFERENCE_HANDLER(handler) //TODO
 
 // bind ending
-#define EULUNA_END });
+#define EULUNA_END() ;});
 
 #endif // EULUNABINDER_HPP
