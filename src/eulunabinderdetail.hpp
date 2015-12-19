@@ -161,6 +161,40 @@ std::function<void(const euluna_shared_ptr<C>&, const Args&...)> make_shared_mem
 }
 */
 
+/// Create member function lambdas for shared classes
+template<typename Ret, typename C, typename... Args>
+std::function<Ret(C*, const Args&...)> make_managed_mem_func(Ret (C::* f)(Args...)) {
+    auto mf = std::mem_fn(f);
+    return [=](C* obj, const Args&... args) mutable -> Ret {
+        if(!obj) throw EulunaInvalidObjectError();
+        return mf(obj, args...);
+    };
+}
+template<typename Ret, typename C, typename... Args>
+std::function<Ret(C*, const Args&...)> make_managed_mem_func(Ret (C::* f)(Args...) const) {
+    auto mf = std::mem_fn(f);
+    return [=](C* obj, const Args&... args) mutable -> Ret {
+        if(!obj) throw EulunaInvalidObjectError();
+        return mf(obj, args...);
+    };
+}
+template<typename C, typename... Args>
+std::function<void(C*, const Args&...)> make_managed_mem_func(void (C::* f)(Args...)) {
+    auto mf = std::mem_fn(f);
+    return [=](C* obj, const Args&... args) mutable -> void {
+        if(!obj) throw EulunaInvalidObjectError();
+        mf(obj, args...);
+    };
+}
+template<typename C, typename... Args>
+std::function<void(C*, const Args&...)> make_managed_mem_func(void (C::* f)(Args...) const) {
+    auto mf = std::mem_fn(f);
+    return [=](C* obj, const Args&... args) mutable -> void {
+        if(!obj) throw EulunaInvalidObjectError();
+        mf(obj, args...);
+    };
+}
+
 /// Create member function lambdas for singleton classes
 template<typename Ret, typename C, typename... Args>
 std::function<Ret(const Args&...)> make_mem_func_singleton(Ret (C::* f)(Args...), C* instance) {
@@ -185,15 +219,29 @@ std::function<void(const Args&...)> make_mem_func_singleton(void (C::* f)(Args..
 
 /*
 /// Bind member functions for shared classes
-template<typename C, typename Ret, class FC, typename... Args>
-EulunaCppFunction bind_shared_mem_fun(Ret (FC::* f)(Args...)) {
-    typedef typename std::tuple<euluna_shared_ptr<FC>, typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
-    auto lambda = make_shared_mem_func<Ret,FC>(f);
+template<typename Ret, class C, typename... Args>
+EulunaCppFunction bind_shared_mem_fun(Ret (C::* f)(Args...)) {
+    typedef typename std::tuple<euluna_shared_ptr<C>, typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
+    auto lambda = make_shared_mem_func(f);
     return bind_fun_specializer<typename euluna_traits::remove_const_ref<Ret>::type,
                                 decltype(lambda),
                                 Tuple>(lambda);
 }
 */
+
+/// Bind member functions for managed classes
+template<typename Ret, class C, typename... Args>
+typename std::enable_if<std::is_class<C>::value, EulunaCppFunction>::type bind_managed_mem_fun(Ret (C::* f)(Args...)) {
+    typedef typename std::tuple<C*, typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
+    auto lambda = make_managed_mem_func(f);
+    return bind_fun_specializer<typename euluna_traits::remove_const_ref<Ret>::type, decltype(lambda), Tuple>(lambda);
+}
+template<typename Ret, class C, typename... Args>
+typename std::enable_if<std::is_class<C>::value, EulunaCppFunction>::type bind_managed_mem_fun(Ret (C::* f)(Args...) const) {
+    typedef typename std::tuple<C*, typename euluna_traits::remove_const_ref<Args>::type...> Tuple;
+    auto lambda = make_managed_mem_func(f);
+    return bind_fun_specializer<typename euluna_traits::remove_const_ref<Ret>::type, decltype(lambda), Tuple>(lambda);
+}
 
 /// Bind member functions for singleton classes
 template<typename C, typename Ret, class FC, typename... Args>

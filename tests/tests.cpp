@@ -122,7 +122,7 @@ public:
         delete this;
     }
 
-    int getDummyCounter() { return m_dummyCounter; }
+    static int getDummyCounter() { return m_dummyCounter; }
 
 private:
     std::string m_boo;
@@ -130,17 +130,19 @@ private:
 };
 int Dummy::m_dummyCounter = 0;
 
-void __handleDummyReferenceChange(EulunaEngine* euluna, Dummy *dummy, bool addRef, int totalRefs) {
-    if(totalRefs == 0) {
-        // releases all lua variables related to this object
-        //euluna->releaseManagedObject(dummy);
-        // delete C++ memory for this object
-        delete dummy;
-    }
+void __handleDummyUse(EulunaInterface* lua, Dummy *dummy) {
+    // nothing to do
+}
+void __handleDummyRelease(EulunaInterface* lua, Dummy *dummy) {
+    std::cout << "relase" << dummy->getBoo() << std::endl;
+    // releases all lua variables related to this object
+    lua->releaseObject(dummy);
+    // delete C++ memory for this object
+    delete dummy;
 }
 
 EULUNA_BEGIN_MANAGED_CLASS(Dummy)
-EULUNA_CLASS_REFERENCE_HANDLER(__handleDummyReferenceChange)
+EULUNA_CLASS_REFERENCE_HANDLERS(__handleDummyUse, __handleDummyRelease)
 EULUNA_CLASS_STATIC(Dummy, create)
 EULUNA_CLASS_MEMBER(Dummy, destroy)
 EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new Dummy; })
@@ -151,15 +153,33 @@ EULUNA_END()
 
 TEST(Euluna, ManagedClass) {
     std::string script = R"(
+        local res = ''
         local dummy = Dummy.create()
-        dummy.setBoo("test")
-        local res = dummy.getBoo()
-        dummy.destroy()
+        dummy:setBoo("hello")
+        res = res .. dummy:getBoo()
+        dummy:destroy()
         dummy = nil
         collectgarbage("collect")
+
+        dummy = Dummy.new()
+        dummy:setBoo(" world")
+        res = res .. dummy:getBoo()
+        Dummy.delete(dummy)
+        dummy = nil
+
+        --dummy = Dummy.new()
+        --dummy:setBoo("!")
+        --res = res .. dummy:getBoo()
+        --dummy = nil
+        Dummy.new()
+
+        collectgarbage("collect")
+        collectgarbage("collect")
+
         return res
     )";
-    EXPECT_EQ(g_lua.runBuffer<std::string>(script), "test");
+    EXPECT_EQ(g_lua.runBuffer<std::string>(script), "hello world!");
+    EXPECT_EQ(Dummy::getDummyCounter(), 0);
 }
 
 //////////////////////

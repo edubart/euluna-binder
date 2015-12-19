@@ -107,6 +107,17 @@ template<> inline bool pull(EulunaInterface *lua, int index, std::string& str) {
     return true;
 }
 
+
+// class pointer
+template<class C> typename std::enable_if<std::is_class<C>::value, int>::type push(EulunaInterface* lua, C* obj) {
+    lua->pushObject(obj);
+    return true;
+}
+template<class C> typename std::enable_if<std::is_class<C>::value, int>::type pull(EulunaInterface* lua, int index, C*& obj) {
+    obj = lua->toObject<C>(index);
+    return true;
+}
+
 }
 
 #endif // EULUNACASTER_HPP

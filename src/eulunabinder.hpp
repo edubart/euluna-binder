@@ -98,10 +98,12 @@ class EulunaBinder
 
     class BinderManagedClass : public Binder {
         std::string m_name;
+        std::string m_base;
         std::map<std::string,EulunaCppFunctionPtr> m_functions;
+        std::function<void(EulunaInterface*,void*)> m_useHandler;
+        std::function<void(EulunaInterface*,void*)> m_releaseHandler;
     public:
-        explicit BinderManagedClass(const std::string& name) : m_name(name) {
-        }
+        explicit BinderManagedClass(const std::string& name, const std::string& base) : m_name(name), m_base(base) { }
         template<typename F>
         BinderManagedClass& defStatic(const std::string& functionName, F&& function) {
             assert(m_functions.find(functionName) == m_functions.end());
@@ -109,14 +111,29 @@ class EulunaBinder
             return *this;
         };
 
-        template<class C, typename F>
-        BinderManagedClass& def(const std::string& functionName, F C::*function) {
+        template<typename F>
+        BinderManagedClass& def(const std::string& functionName, F&& function) {
             assert(m_functions.find(functionName) == m_functions.end());
-            //m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_mem_fun(std::forward<decltype(function)>(function))));
+            m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_managed_mem_fun(std::forward<F>(function))));
             return *this;
         }
+
+        template<class C>
+        BinderManagedClass& useHandler(void (*function)(EulunaInterface*, C*)) {
+            m_useHandler = [=](EulunaInterface* lua, void *instance) {
+                function(lua, static_cast<C*>(instance));
+            };
+            return *this;
+        };
+        template<class C>
+        BinderManagedClass& releaseHandler(void (*function)(EulunaInterface*, C*)) {
+            m_releaseHandler = [=](EulunaInterface* lua, void *instance) {
+                function(lua, static_cast<C*>(instance));
+            };
+            return *this;
+        };
         virtual void registerBindings(EulunaEngine *euluna) {
-            euluna->registerManagedClass(m_name);
+            euluna->registerManagedClass(m_name, m_base, m_useHandler, m_releaseHandler);
             for(auto& it : m_functions)
                 euluna->registerClassFunction(m_name, it.first, it.second.get());
         }
@@ -157,8 +174,8 @@ public:
     }
 
     template<class C>
-    EulunaBinder::BinderManagedClass& managedClass(const std::string& name) {
-        auto ret = new BinderManagedClass(name);
+    EulunaBinder::BinderManagedClass& managedClass(const std::string& name, const std::string& base = std::string()) {
+        auto ret = new BinderManagedClass(name, base);
         m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
         return *ret;
     }
@@ -201,7 +218,9 @@ public:
 // bind managed C++ classes
 #define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(#klass)
 #define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(name)
-#define EULUNA_CLASS_REFERENCE_HANDLER(handler) //TODO
+#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS(klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(#klass,base)
+#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS_NAMED(name,klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(name,base)
+#define EULUNA_CLASS_REFERENCE_HANDLERS(use,release) .useHandler(use).releaseHandler(release)
 
 // bind ending
 #define EULUNA_END() ;});

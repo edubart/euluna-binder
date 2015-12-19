@@ -179,15 +179,17 @@ public:
     void pushLightUserdata(void* p) { lua_pushlightuserdata(L, p); }
     void pushThread() { lua_pushthread(L); }
     void pushCFunction(LuaCFunction func, int n = 0) { lua_pushcclosure(L, func, n); }
-    void pushCppFunction(EulunaCppFunction* func) {
+    void pushCppFunction(EulunaCppFunction* func, const std::string& name = std::string()) {
+        assert(func);
         // create a pointer to func (this pointer DOESN'T hold the function existence)
         pushLightUserdata(func);
-        assert(func);
+        pushString(name);
         // actually pushes a C function callback that will call the cpp function
         pushCFunction([](lua_State* L) -> int {
             EulunaInterface lua(L);
             // retrieves function pointer from userdata
             auto funcPtr = static_cast<EulunaCppFunction*>(lua.toUserdata(lua.upvalueIndex(1)));
+            const char* funcName = lua.toCString(lua.upvalueIndex(2));
             assert(funcPtr);
             int numRets;
             // do the call
@@ -197,13 +199,13 @@ public:
             } catch(std::exception& e) {
                 numRets = 0;
                 lua.clearStack();
-                lua.traceback(euluna_tools::format("C++ exception %s: %s", euluna_tools::demangle_type(e), e.what()));
+                lua.traceback(euluna_tools::format("C++ exception %s: in call of '%s': %s", euluna_tools::demangle_type(e), funcName, e.what()));
                 lua.error();
             }
             return numRets;
-        }, 1);
+        }, 2);
     }
-    void pushCppFunction(EulunaCppFunction func) {
+    void pushCppFunction(EulunaCppFunction func, const std::string& name = std::string()) {
         // create a pointer to func (this pointer holds the function existence)
         new(newUserdata(sizeof(EulunaCppFunctionPtr))) EulunaCppFunctionPtr(new EulunaCppFunction(std::move(func)));
         // sets the userdata __gc metamethod, needed to free the function pointer when it gets collected
@@ -217,11 +219,13 @@ public:
         });
         setField("__gc");
         setMetatable();
+        pushString(name);
         // actually pushes a C function callback that will call the cpp function
         pushCFunction([](lua_State* L) -> int {
             EulunaInterface lua(L);
             // retrieves function pointer from userdata
             auto funcPtr = static_cast<EulunaCppFunctionPtr*>(lua.toUserdata(lua.upvalueIndex(1)));
+            const char* funcName = lua.toCString(lua.upvalueIndex(2));
             assert(funcPtr);
             int numRets;
             // do the call
@@ -231,20 +235,22 @@ public:
             } catch(std::exception& e) {
                 numRets = 0;
                 lua.clearStack();
-                lua.traceback(euluna_tools::format("C++ exception %s: %s", euluna_tools::demangle_type(e), e.what()));
+                lua.traceback(euluna_tools::format("C++ exception %s: in call of '%s': %s", euluna_tools::demangle_type(e), funcName, e.what()));
                 lua.error();
             }
             return numRets;
-        }, 1);
+        }, 2);
     }
 
     // get functions
     void rawGet(int index = -2) { lua_rawget(L, index); }
     void rawGeti(int n, int index = -1) { lua_rawgeti(L, index, n); }
+    void rawGetField(const char* key, int index = -1) { pushString(key); rawGet(index + (index<0 ? -1 : 0)); }
+    void rawGetField(const std::string& key, int index = -1) { rawGetField(key.c_str(), index); }
     void getField(const char* key, int index = -1) { lua_getfield(L, index, key); }
     void getField(const std::string& key, int index = -1) { lua_getfield(L, index, key.c_str()); }
-    void getMetaField(const char* key, int index = -1) { luaL_getmetafield(L, index, key); }
-    void getMetaField(const std::string& key, int index = -1) { luaL_getmetafield(L, index, key.c_str()); }
+    int getMetaField(const char* key, int index = -1) { return luaL_getmetafield(L, index, key); }
+    int getMetaField(const std::string& key, int index = -1) { return luaL_getmetafield(L, index, key.c_str()); }
     void getTable(int index = -2) { lua_gettable(L, index); }
     void getMetatable(int index = -1) { lua_getmetatable(L, index); }
     void getGlobal(const char* key) { lua_getglobal(L, key); }
@@ -260,6 +266,8 @@ public:
     // set functions
     void rawSet(int index = -3) { lua_rawset(L, index); }
     void rawSeti(int n, int index = -2) { lua_rawseti(L, index, n); }
+    void rawSetField(const char* key, int index = -2) { pushString(key); insert(-2); rawSet(index + (index<0 ? -1 : 0)); }
+    void rawSetField(const std::string& key, int index = -2) { rawSetField(key.c_str(), index); }
     void setField(const char* key, int index = -2) { lua_setfield(L, index, key); }
     void setField(const std::string& key, int index = -2) { lua_setfield(L, index, key.c_str()); }
     void setTable(int index = -3) { lua_settable(L, index); }
@@ -336,23 +344,91 @@ public:
 
     // object related
     template<class C>
-    void useObject(C* instance);
-    template<class C>
-    void releaseObject(C* instance);
-    template<class C>
-    void pushObject(C *instance);
-        useObject(ptr);
-        new(newUserdata(sizeof))
-        pushL
+    void pushObject(C* instance) {
+        assert(instance);
+        // check if object is already in registry
+        pushLightUserdata(instance);
+        getRegistry();
+        if(isNil()) {
+            pop();
+            // create new table for object
+            newTable();
+
+            // set __p value in the table and store the object pointer
+            pushLightUserdata(instance);
+            rawSetField("__p");
+
+            // set the object metatable to Class_mt
+            getRegistryField(euluna_tools::demangle_type(instance) + "_mt");
+            assert(isTable());
+            setMetatable();
+
+            // save object to the registry
+            pushLightUserdata(instance);
+            pushValue(-2);
+            setRegistry();
+
+            // call object __use metamethod
+            if(getMetaField("__use") != 0) {
+                assert(isFunction());
+                pushValue(-2);
+                call(1,0);
+            }
+        } else {
+            assert(isTable());
+#ifndef NDEBUG
+            rawGetField("__p");
+            assert(toUserdata() == instance);
+            pop();
+#endif
+        }
     }
 
-    EulunaObject* toObject(int index = -1) {
-        if(!isUserdata(index))
-          return nullptr;
-        pushValue(index);
+    template<class C>
+    void releaseObject(C* instance) {
+        assert(instance);
+
+        // get object table registry
+        pushLightUserdata(instance);
         getRegistry();
-        EulunaObject *object = static_cast<EulunaObject*>(toUserdata());
-        return object;
+        assert(isTable());
+
+#ifndef NDEBUG
+        // check if is the same object
+        rawGetField("__p");
+        assert(toUserdata() == instance);
+        pop(1);
+#endif
+        // set table object pointer to nil
+        pushNil();
+        rawSetField("__p");
+        pop(1);
+
+        // release object from registry
+        pushLightUserdata(instance);
+        pushNil();
+        setRegistry();
+    }
+
+    template<class C>
+    C* toObject(int index = -1) {
+        if(!isTable(index))
+          return nullptr;
+        rawGetField("__p", index);
+        if(isNil()) {
+            pop();
+            return nullptr;
+        }
+#ifndef NDEBUG
+        assert(isUserdata());
+        pushValue();
+        getRegistry();
+        assert(isTable());
+        rawGetField("__p");
+        assert(toUserdata(-1) == toUserdata(-3));
+        pop(2);
+#endif
+        return static_cast<C*>(popUserdata());
     }
 
     // polymorphic
@@ -419,46 +495,5 @@ protected:
 };
 
 #include "eulunacaster.hpp"
-#include "eulunaobject.hpp"
-
-template<class C>
-EulunaObject *EulunaInterface::useObject(C* instance) {
-    assert(instance);
-    pushLightUserdata(instance);
-    getRegistry();
-    EulunaObject *obj;
-    if(isNil()) {
-        pushLightUserdata(instance);
-        obj = new EulunaObject();
-        pushLightUserdata(obj);
-        setRegistry();
-    } else
-        obj = static_cast<EulunaObject*>(popUserdata());
-    obj->lua_ref(this);
-    return obj;
-}
-
-template<class C>
-void EulunaInterface::releaseObject(C* instance) {
-    assert(instance);
-    pushLightUserdata(instance);
-    getRegistry();
-    EulunaObject *obj = static_cast<EulunaObject*>(popUserdata());
-    assert(obj);
-    obj->lua_release(this);
-    pushLightUserdata(instance);
-    pushNil();
-    setRegistry();
-    delete obj;
-}
-
-template<class C>
-void EulunaInterface::pushObject(C *instance);
-    EulunaObject *obj = useObject(ptr);
-    new(newUserdata(sizeof(void*))) void*(instance);
-    obj->lua_getMetatable(this, euluna_tools::demangle_type(*instance));
-    assert(!isNil());
-    setMetatable();
-}
 
 #endif // EULUNAINTERFACE_HPP

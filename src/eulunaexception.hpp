@@ -68,4 +68,10 @@ public:
         : EulunaException("Lua error handler error", message) { }
 };
 
+class EulunaInvalidObjectError : public EulunaException {
+public:
+    explicit EulunaInvalidObjectError(const std::string& message = std::string())
+        : EulunaException("Euluna invalid object", message) { }
+};
+
 #endif // EULUNAEXCEPTION_HPP
