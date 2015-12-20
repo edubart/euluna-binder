@@ -302,6 +302,7 @@ public:
     const char* typeName(int type) { return lua_typename(L, type); }
     void traceback(const char* msg, int level = 0) { luaL_traceback(L, L, msg, level); }
     void traceback(const std::string& msg, int level = 0) { luaL_traceback(L, L, msg.c_str(), level); }
+    void collect() { gc(LUA_GCCOLLECT, 0); }
     void getOrCreateGlobalTable(const std::string& name) {
         getGlobal(name);
         if(isNil()) {
@@ -341,32 +342,76 @@ public:
     void unref(int ref) { luaL_unref(L, LUA_REGISTRYINDEX, ref); }
     void getRef(int ref) { lua_rawgeti(L, LUA_REGISTRYINDEX, ref); }
 
+    // weak refs
+    void getWeakTable() {
+        getRegistryField("__eulunaweak");
+        // create weak table if not exists
+        if(isNil()) {
+            pop();
+            // create weak table
+            newTable();
+            // create a metatable with weak mode on values
+            newTable();
+            pushString("v");
+            setField("__mode");
+            // set weak table metatable
+            setMetatable();
+            // save weak table
+            pushValue();
+            setRegistryField("__eulunaweak");
+        }
+    }
+    void setWeak() {
+        getWeakTable();
+        insert(-3);
+        rawSet();
+        pop();
+    };
+    void getWeak() {
+        getWeakTable();
+        insert(-2);
+        rawGet();
+        remove(-2);
+    }
+    int weakRef() {
+        static int id = 0;
+        ++id;
+        assert(id < 2147483647);
+        getWeakTable();
+        insert(-2);
+        rawSeti(id);
+        pop();
+        return id;
+    }
+    void getWeakRef(int weakRef) {
+        getWeakTable();
+        rawGeti(weakRef);
+        remove(-2);
+    }
+
 
     // object related
     template<class C>
-    void pushObject(C* instance) {
-        assert(instance);
-        // check if object is already in registry
-        pushLightUserdata(instance);
-        getRegistry();
+    void pushObject(C* obj) {
+        assert(obj);
+        // search object in the weak table
+        pushLightUserdata(obj);
+        getWeak();
         if(isNil()) {
             pop();
-            // create new table for object
-            newTable();
 
-            // set __p value in the table and store the object pointer
-            pushLightUserdata(instance);
-            rawSetField("__p");
+            // new object userdata
+            new(newUserdata(sizeof(void*))) void*(obj);
 
-            // set the object metatable to Class_mt
-            getRegistryField(euluna_tools::demangle_type(instance) + "_mt");
+            // set object metatable
+            getRegistryField(euluna_tools::demangle_type(obj) + "_mt");
             assert(isTable());
             setMetatable();
 
-            // save object to the registry
-            pushLightUserdata(instance);
+            // save object in weak table
+            pushLightUserdata(obj);
             pushValue(-2);
-            setRegistry();
+            setWeak();
 
             // call object __use metamethod
             if(getMetaField("__use") != 0) {
@@ -374,61 +419,42 @@ public:
                 pushValue(-2);
                 call(1,0);
             }
-        } else {
-            assert(isTable());
-#ifndef NDEBUG
-            rawGetField("__p");
-            assert(toUserdata() == instance);
-            pop();
-#endif
         }
     }
 
     template<class C>
-    void releaseObject(C* instance) {
-        assert(instance);
+    void releaseObject(C* obj) {
+        assert(obj);
 
-        // get object table registry
-        pushLightUserdata(instance);
-        getRegistry();
-        assert(isTable());
+        pushLightUserdata(obj);
+        getWeak();
+        if(!isNil()) {
+            // reset userdata pointer
+            assert(isUserdata());
+            void **objPtr = static_cast<void**>(toUserdata());
+            if(objPtr)
+                *objPtr = nullptr;
+            pop();
 
-#ifndef NDEBUG
-        // check if is the same object
-        rawGetField("__p");
-        assert(toUserdata() == instance);
-        pop(1);
-#endif
-        // set table object pointer to nil
-        pushNil();
-        rawSetField("__p");
-        pop(1);
+            // assure the object is not on weak table anymore
+            pushLightUserdata(obj);
+            pushNil();
+            setWeak();
+        } else
+            pop();
 
-        // release object from registry
-        pushLightUserdata(instance);
+        // release object table from registry if any
+        pushLightUserdata(obj);
         pushNil();
         setRegistry();
     }
 
     template<class C>
     C* toObject(int index = -1) {
-        if(!isTable(index))
-          return nullptr;
-        rawGetField("__p", index);
-        if(isNil()) {
-            pop();
+        void **objA = static_cast<void**>(toUserdata(index));
+        if(!objA)
             return nullptr;
-        }
-#ifndef NDEBUG
-        assert(isUserdata());
-        pushValue();
-        getRegistry();
-        assert(isTable());
-        rawGetField("__p");
-        assert(toUserdata(-1) == toUserdata(-3));
-        pop(2);
-#endif
-        return static_cast<C*>(popUserdata());
+        return static_cast<C*>(*objA);
     }
 
     // polymorphic

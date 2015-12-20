@@ -52,30 +52,88 @@ public:
         // creates the class metatable
         getOrCreateRegistryTable(className + "_mt");
 
-        // index methamethod
+        // save class table in index 1 of the class metatable
         pushValue(klass);
+        rawSeti(1);
+
+        // get event
+        pushCppFunction([](EulunaInterface* lua) {
+            // stack: obj, key
+            void* obj = lua->toObject<void*>(-2);
+            std::string key = lua->toString(-1);
+            assert(obj);
+
+            // check for the field in the obj table
+            lua->pushLightUserdata(obj); // push obj pointer
+            lua->getRegistry(); // get obj table
+            if(!lua->isNil()) {
+                lua->insert(-2); // move key value to top
+                lua->rawGet(); // get key from obj table
+                if(!lua->isNil()) {
+                    lua->insert(-3); // move value to bottom
+                    lua->pop(2); // pop obj table, obj
+                    return 1;
+                }
+            }
+            lua->pop(2); // leave only obj in the stack
+
+            // pushes the method assigned by this key
+            lua->getMetatable();  // pushes obj metatable
+            lua->rawGeti(1); // push obj methods table
+            lua->getField(key); // pushes obj method
+            lua->insert(-4); // move value to bottom
+            lua->pop(3); // pop obj methods, obj metatable, obj
+
+            // the result value is on the stack
+            assert(lua->stackSize() == 1);
+            return 1;
+        }, className + ":__index");
         setField("__index");
+
+        // set event
+        pushCppFunction([](EulunaInterface* lua) {
+            //stack: obj, key, value
+            void* obj = lua->toObject<void*>(-3);
+            assert(obj);
+            lua->remove(-3); // remove obj from stack
+            lua->pushLightUserdata(obj); // push obj pointer
+            lua->getRegistry(); // get obj table
+            if(lua->isNil()) {
+                lua->pop(); // pops the nil field
+                lua->newTable(); // create a new obj table
+                lua->pushLightUserdata(obj); // push obj pointer
+                lua->pushValue(-2); // push obj table
+                lua->setRegistry(); // save obj table in registry
+            }
+            lua->insert(-3); // move obj table to bottom
+            lua->rawSet(); // set the obj table field
+            lua->pop();
+            assert(lua->stackSize() == 0);
+            return 0;
+        }, className + ":__newindex");
+        setField("__newindex");
 
         // use event
         if(useHandler) {
             pushCppFunction([&](EulunaInterface *lua) {
                 void *obj = lua->toObject<void*>();
                 assert(obj);
-                useHandler(lua,obj);
                 lua->pop();
+                useHandler(lua,obj);
+                assert(lua->stackSize() == 0);
                 return 0;
             }, className + ":__use");
             setField("__use");
         }
- 
+
         // release event
         if(releaseHandler) {
             pushCppFunction([&](EulunaInterface *lua) {
                 void *obj = lua->toObject<void*>();
-                std::cout << "gc" << obj << std::endl;
+                lua->pop();
                 if(obj)
                     releaseHandler(lua,obj);
-                lua->pop();
+                assert(lua->stackSize() == 0);
                 return 0;
             }, className + ":__gc");
             setField("__gc");

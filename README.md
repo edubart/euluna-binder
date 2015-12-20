@@ -148,15 +148,16 @@ private:
     std::string m_boo;
 };
 
-void __handleDummyReferenceChange(EulunaEngine *euluna, Dummy *dummy, bool addRef, int totalRefs) {
-    if(totalRefs == 0) {
-        euluna->releaseManagedObject(dummy); // collects all lua variables related to this object
-        delete dummy; // delete C++ memory for this object
-    }
+void __handleDummyUse(EulunaInterface* lua, Dummy *dummy) {
+    // nothing to do
+}
+void __handleDummyRelease(EulunaInterface* lua, Dummy *dummy) {
+    lua->releaseObject(dummy);
+    delete dummy;
 }
 
 EULUNA_BEGIN_MANAGED_CLASS(Dummy)
-EULUNA_CLASS_REFERENCE_HANDLER(__handleDummyReferenceChange)
+EULUNA_CLASS_REFERENCE_HANDLERS(__handleDummyUse, __handleDummyRelease)
 EULUNA_CLASS_STATIC_NAMED("new", []{ return new Dummy; })
 EULUNA_CLASS_MEMBER(Dummy, setBoo)
 EULUNA_CLASS_MEMBER(Dummy, getBoo)
