@@ -102,6 +102,35 @@ TEST(EulunaBinder, Singletons) {
     EXPECT_EQ(g_lua.stackSize(), 0);
 }
 
+
+/////////
+TEST(EulunaBinder, StdTypes) {
+    EXPECT_EQ(g_lua.runBuffer<std::vector<int>>("return {1,2,3}"), std::vector<int>({1,2,3}));
+    EXPECT_EQ(g_lua.runBuffer<std::deque<int>>("return {1,2,3}"), std::deque<int>({1,2,3}));
+    EXPECT_EQ(g_lua.runBuffer<std::list<int>>("return {1,2,3}"), std::list<int>({1,2,3}));
+    EXPECT_EQ(g_lua.runBuffer<std::set<int>>("return {1,2,3}"), std::set<int>({1,2,3}));
+    EXPECT_EQ(g_lua.runBuffer<std::unordered_set<int>>("return {1,2,3}"), std::unordered_set<int>({1,2,3}));
+
+    std::map<std::string,int> map;
+    map["a"] = 1;
+    map["b"] = 2;
+    map["c"] = 3;
+    EXPECT_EQ(g_lua.runBuffer<decltype(map)>("return {a=1,b=2,c=3}"), map);
+
+    std::unordered_map<std::string,int> umap;
+    umap["a"] = 1;
+    umap["b"] = 2;
+    umap["c"] = 3;
+    EXPECT_EQ(g_lua.runBuffer<decltype(umap)>("return {a=1,b=2,c=3}"), umap);
+
+    std::tuple<std::string,int> tuple("lala",2);
+    EXPECT_EQ(g_lua.runBuffer<decltype(tuple)>("return {'lala',2}"), tuple);
+
+    std::function<int(int,int)> sum;
+    sum = g_lua.runBuffer<decltype(sum)>("return function(a,b) return a+b end");
+    EXPECT_EQ(sum(1,2), 3);
+}
+
 ///////////////////////////
 class Dummy {
 public:

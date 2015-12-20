@@ -161,12 +161,12 @@ std::function<void(const euluna_shared_ptr<C>&, const Args&...)> make_shared_mem
 }
 */
 
-/// Create member function lambdas for shared classes
+/// Create member function lambdas for managed classes
 template<typename Ret, typename C, typename... Args>
 std::function<Ret(C*, const Args&...)> make_managed_mem_func(Ret (C::* f)(Args...)) {
     auto mf = std::mem_fn(f);
     return [=](C* obj, const Args&... args) mutable -> Ret {
-        if(!obj) throw EulunaInvalidObjectError();
+        if(!obj) throw EulunaEngineError("Null object while calling a bound C++ function");
         return mf(obj, args...);
     };
 }
@@ -174,7 +174,7 @@ template<typename Ret, typename C, typename... Args>
 std::function<Ret(C*, const Args&...)> make_managed_mem_func(Ret (C::* f)(Args...) const) {
     auto mf = std::mem_fn(f);
     return [=](C* obj, const Args&... args) mutable -> Ret {
-        if(!obj) throw EulunaInvalidObjectError();
+        if(!obj) throw EulunaEngineError("Null object while calling a bound C++ function");
         return mf(obj, args...);
     };
 }
@@ -182,7 +182,7 @@ template<typename C, typename... Args>
 std::function<void(C*, const Args&...)> make_managed_mem_func(void (C::* f)(Args...)) {
     auto mf = std::mem_fn(f);
     return [=](C* obj, const Args&... args) mutable -> void {
-        if(!obj) throw EulunaInvalidObjectError();
+        if(!obj) throw EulunaEngineError("Null object while calling a bound C++ function");
         mf(obj, args...);
     };
 }
@@ -190,7 +190,7 @@ template<typename C, typename... Args>
 std::function<void(C*, const Args&...)> make_managed_mem_func(void (C::* f)(Args...) const) {
     auto mf = std::mem_fn(f);
     return [=](C* obj, const Args&... args) mutable -> void {
-        if(!obj) throw EulunaInvalidObjectError();
+        if(!obj) throw EulunaEngineError("Null object while calling a bound C++ function");
         mf(obj, args...);
     };
 }
@@ -286,6 +286,21 @@ EulunaCppFunction bind_shared_mem_fun(int (C::*f)(EulunaInterface*)) {
     };
 }
 */
+
+}
+
+namespace euluna_caster {
+
+// bind std::function push
+template<typename Ret, typename... Args>
+int push(EulunaInterface *lua, const std::function<Ret(Args...)>& func) {
+    if(func) {
+        EulunaCppFunction f = euluna_binder::bind_fun(func);
+        lua->pushCppFunction(f, "std::function callback");
+    } else
+        lua->pushNil();
+    return 1;
+}
 
 }
 

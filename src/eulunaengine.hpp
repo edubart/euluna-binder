@@ -85,7 +85,6 @@ public:
             lua->pop(3); // pop obj methods, obj metatable, obj
 
             // the result value is on the stack
-            assert(lua->stackSize() == 1);
             return 1;
         }, className + ":__index");
         setField("__index");
@@ -108,7 +107,6 @@ public:
             lua->insert(-3); // move obj table to bottom
             lua->rawSet(); // set the obj table field
             lua->pop();
-            assert(lua->stackSize() == 0);
             return 0;
         }, className + ":__newindex");
         setField("__newindex");
@@ -120,7 +118,6 @@ public:
                 assert(obj);
                 lua->pop();
                 useHandler(lua,obj);
-                assert(lua->stackSize() == 0);
                 return 0;
             }, className + ":__use");
             setField("__use");
@@ -133,7 +130,6 @@ public:
                 lua->pop();
                 if(obj)
                     releaseHandler(lua,obj);
-                assert(lua->stackSize() == 0);
                 return 0;
             }, className + ":__gc");
             setField("__gc");
@@ -150,7 +146,6 @@ public:
         }
 
         pop(2);
-        assert(stackSize() == 0);
     }
 
     void registerClassFunction(const std::string& className, const std::string& functionName, EulunaCppFunction* function) {

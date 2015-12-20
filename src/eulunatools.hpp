@@ -32,6 +32,20 @@ template<class T> struct replace_extent<T[]> { typedef const T* type; };
 template<class T, unsigned long N> struct replace_extent<T[N]> { typedef const T* type;};
 template<typename T> struct remove_const_ref { typedef typename std::remove_const<typename std::remove_reference<T>::type>::type type; };
 
+template<typename Lambda>
+struct lambda_to_stdfunction {
+    template<typename F>
+    struct convert_lambda;
+
+    template<typename L, typename Ret, typename... Args>
+    struct convert_lambda<Ret(L::*)(Args...) const> {
+        typedef std::function<Ret(Args...)> value;
+    };
+
+    typedef decltype(&Lambda::operator()) F;
+    typedef typename convert_lambda<F>::value value;
+};
+
 }
 
 namespace euluna_tools {

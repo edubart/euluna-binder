@@ -40,7 +40,8 @@ class EulunaBinder
         explicit BinderGlobals() {}
         template<typename F>
         BinderGlobals& def(const std::string& functionName, F function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Global function '%s' is already defined", functionName));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
             return *this;
         };
@@ -57,7 +58,8 @@ class EulunaBinder
         explicit BinderSingleton(const std::string& name) : m_name(name) { }
         template<typename F>
         BinderSingleton& def(const std::string& functionName, F function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Function '%s' for singleton '%s' is already defined", functionName, m_name));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
             return *this;
         };
@@ -74,18 +76,21 @@ class EulunaBinder
         std::map<std::string,EulunaCppFunctionPtr> m_functions;
     public:
         explicit BinderSingletonClass(const std::string& name, void* instance) : m_name(name), m_instance(instance) {
-            assert(instance);
+            if(!instance)
+                throw EulunaEngineError(euluna_tools::format("Null singleton instance while binding singleton '%s'", m_name));
         }
         template<typename F>
         BinderSingletonClass& defStatic(const std::string& functionName, F&& function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Static function '%s' for singleton '%s' is already defined", functionName, m_name));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
             return *this;
         };
 
         template<class C, typename F>
         BinderSingletonClass& def(const std::string& functionName, F C::*function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Member function '%s' for singleton '%s' is already defined", functionName, m_name));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_singleton_mem_fun(std::forward<decltype(function)>(function), static_cast<C*>(m_instance))));
             return *this;
         }
@@ -106,14 +111,16 @@ class EulunaBinder
         explicit BinderManagedClass(const std::string& name, const std::string& base) : m_name(name), m_base(base) { }
         template<typename F>
         BinderManagedClass& defStatic(const std::string& functionName, F&& function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Static function '%s' for managed class '%s' is already defined", functionName, m_name));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_fun(std::forward<F>(function))));
             return *this;
         };
 
         template<typename F>
         BinderManagedClass& def(const std::string& functionName, F&& function) {
-            assert(m_functions.find(functionName) == m_functions.end());
+            if(m_functions.find(functionName) != m_functions.end())
+                throw EulunaEngineError(euluna_tools::format("Member function '%s' for managed class '%s' is already defined", functionName, m_name));
             m_functions[functionName] = EulunaCppFunctionPtr(new EulunaCppFunction(euluna_binder::bind_managed_mem_fun(std::forward<F>(function))));
             return *this;
         }

@@ -23,7 +23,6 @@
 #ifndef EULUNAEXCEPTION_HPP
 #define EULUNAEXCEPTION_HPP
 
-#include "eulunaprereqs.hpp"
 #include "eulunatools.hpp"
 
 // Generic exception thrown
@@ -68,10 +67,10 @@ public:
         : EulunaException("Lua error handler error", message) { }
 };
 
-class EulunaInvalidObjectError : public EulunaException {
+class EulunaEngineError : public EulunaException {
 public:
-    explicit EulunaInvalidObjectError(const std::string& message = std::string())
-        : EulunaException("Euluna invalid object", message) { }
+    explicit EulunaEngineError(const std::string& message = std::string())
+        : EulunaException("Euluna engine error", message) { }
 };
 
 #endif // EULUNAEXCEPTION_HPP

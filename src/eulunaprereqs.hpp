@@ -28,13 +28,18 @@
 #include <cassert>
 
 #include <string>
+#include <list>
+#include <vector>
+#include <deque>
+#include <map>
+#include <set>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <functional>
 #include <exception>
 #include <memory>
 #include <tuple>
-#include <map>
-#include <unordered_map>
 #include <type_traits>
 
 #include <cxxabi.h>

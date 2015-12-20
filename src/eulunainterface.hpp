@@ -23,20 +23,8 @@
 #ifndef EULUNAINTERFACE_HPP
 #define EULUNAINTERFACE_HPP
 
-#include "eulunaprereqs.hpp"
 #include "eulunatools.hpp"
 #include "eulunaexception.hpp"
-
-namespace euluna_caster {
-
-template<typename T>
-typename std::enable_if<!std::is_scalar<T>::value,int>::type push(EulunaInterface *lua, const T& v);
-template<typename T>
-typename std::enable_if<std::is_scalar<T>::value,int>::type push(EulunaInterface *lua, T v);
-template<typename T>
-bool pull(EulunaInterface *lua, int index, T& v);
-
-}
 
 // Interface for managing lua state
 class EulunaInterface {
@@ -44,12 +32,12 @@ public:
     EulunaInterface() : L(luaL_newstate()), m_ownState(true) {
         openLibs();
         if(!L)
-            throw EulunaRuntimeError();
+            throw EulunaRuntimeError("Unable to create new lua state");
     }
 
     explicit EulunaInterface(lua_State *L) : L(L), m_ownState(false) {
         if(!L)
-            throw EulunaRuntimeError();
+            throw EulunaRuntimeError("Invalid lua state");
     }
 
     ~EulunaInterface() {
@@ -81,8 +69,10 @@ public:
         // calculate the number of results
         int rets = stackSize() - savedStackSize;
         // adjust stack size if needed
-        if(numRets >= 0 && rets != numRets)
+        if(numRets >= 0 && rets != numRets) {
             ensureStackSize(savedStackSize + numRets);
+            rets = numRets;
+        }
         // return the number of results
         return rets;
     }
@@ -389,11 +379,13 @@ public:
         remove(-2);
     }
 
-
     // object related
     template<class C>
     void pushObject(C* obj) {
-        assert(obj);
+        if(!obj) {
+            pushNil();
+            return;
+        }
         // search object in the weak table
         pushLightUserdata(obj);
         getWeak();
@@ -405,7 +397,9 @@ public:
 
             // set object metatable
             getRegistryField(euluna_tools::demangle_type(obj) + "_mt");
-            assert(isTable());
+            if(!isTable())
+                throw EulunaEngineError(euluna_tools::format("Unable to push object of type '%s' because its metatable was not found, did you bind it?",
+                                        euluna_tools::demangle_type(obj)));
             setMetatable();
 
             // save object in weak table
@@ -415,7 +409,6 @@ public:
 
             // call object __use metamethod
             if(getMetaField("__use") != 0) {
-                assert(isFunction());
                 pushValue(-2);
                 call(1,0);
             }
@@ -424,7 +417,8 @@ public:
 
     template<class C>
     void releaseObject(C* obj) {
-        assert(obj);
+        if(!obj)
+            return;
 
         pushLightUserdata(obj);
         getWeak();
@@ -434,6 +428,12 @@ public:
             void **objPtr = static_cast<void**>(toUserdata());
             if(objPtr)
                 *objPtr = nullptr;
+
+            // reset userdata metatable
+            pushNil();
+            setMetatable();
+
+            // pop userdata
             pop();
 
             // assure the object is not on weak table anymore
@@ -459,10 +459,7 @@ public:
 
     // polymorphic
     template<typename T, typename... Args>
-    int polymorphicPush(const T& v, const Args&... args) {
-        int r = euluna_caster::push(this, v);
-        return r + polymorphicPush(args...);
-    }
+    int polymorphicPush(const T& v, const Args&... args);
     int polymorphicPush() { return 0; }
 
     template<typename R>
@@ -478,7 +475,7 @@ public:
     }
 
     template<class T>
-    bool polymorphicPull(T& v, int index = -1) { return euluna_caster::pull(this, index, v); }
+    bool polymorphicPull(T& v, int index = -1);
 
     template<typename R, typename... T>
     R polymorphicSafeCall(const T&... args) {
@@ -521,5 +518,16 @@ protected:
 };
 
 #include "eulunacaster.hpp"
+
+template<typename T, typename... Args>
+int EulunaInterface::polymorphicPush(const T& v, const Args&... args) {
+    int r = euluna_caster::push(this, v);
+    return r + polymorphicPush(args...);
+}
+
+template<class T>
+bool EulunaInterface::polymorphicPull(T& v, int index) {
+    return euluna_caster::pull(this, index, v);
+}
 
 #endif // EULUNAINTERFACE_HPP
