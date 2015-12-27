@@ -37,7 +37,7 @@ public:
     }
 
     void registerSingletonClass(const std::string& className) {
-        getOrCreateGlobalTable(className);
+        newGlobalTable(className);
         pop(1);
     }
 
@@ -46,11 +46,11 @@ public:
                               std::function<void(EulunaInterface*,void*)>& useHandler,
                               std::function<void(EulunaInterface*,void*)>& releaseHandler) {
         // creates the class table (that it's also the class methods table)
-        getOrCreateGlobalTable(className);
+        newGlobalTable(className);
         int klass = getTop();
 
         // creates the class metatable
-        getOrCreateRegistryTable(className + "_mt");
+        newMetatable(className + "_mt");
 
         // save class table in index 1 of the class metatable
         pushValue(klass);
@@ -139,7 +139,7 @@ public:
         if(!baseClass.empty()) {
             pushValue(klass);
             newTable();
-            getOrCreateGlobalTable(baseClass);
+            newGlobalTable(baseClass);
             setField("__index");
             setMetatable();
             pop();

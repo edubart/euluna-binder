@@ -25,6 +25,7 @@
 
 #include "eulunatools.hpp"
 #include "eulunaexception.hpp"
+#include "eulunacompat.hpp"
 
 // Interface for managing lua state
 class EulunaInterface {
@@ -251,7 +252,10 @@ public:
     void createTable(int narr, int nrec) { lua_createtable(L, narr, nrec); }
     void newTable() { lua_newtable(L); }
     void* newUserdata(size_t size) { return lua_newuserdata(L, size); }
+    void newMetatable(const char* name) { luaL_newmetatable(L, name); }
     void newMetatable(const std::string& name) { luaL_newmetatable(L, name.c_str()); }
+    void getMetatable(const char* name) { luaL_getmetatable(L, name); }
+    void getMetatable(const std::string& name) { luaL_getmetatable(L, name.c_str()); }
 
     // set functions
     void rawSet(int index = -3) { lua_rawset(L, index); }
@@ -293,7 +297,7 @@ public:
     void traceback(const char* msg, int level = 0) { luaL_traceback(L, L, msg, level); }
     void traceback(const std::string& msg, int level = 0) { luaL_traceback(L, L, msg.c_str(), level); }
     void collect() { gc(LUA_GCCOLLECT, 0); }
-    void getOrCreateGlobalTable(const std::string& name) {
+    void newGlobalTable(const std::string& name) {
         getGlobal(name);
         if(isNil()) {
             pop();
@@ -304,7 +308,7 @@ public:
             assert(isTable());
         }
     }
-    void getOrCreateRegistryTable(const std::string& name) {
+    void newRegistryTable(const std::string& name) {
         getRegistryField(name);
         if(isNil()) {
             pop();
