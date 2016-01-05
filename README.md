@@ -167,8 +167,59 @@ EULUNA_END()
 Lua code:
 ```lua
 local dummy = Dummy.new()
-dummy.setBoo('hello world!')
-print(dummy.getBoo()) -- hello world!
+dummy:setBoo('hello world!')
+print(dummy:getBoo()) -- hello world!
+```
+
+### Class with inheritance
+
+C++ code:
+```cpp
+class Polygon {
+public:
+    virtual float getArea() = 0;
+    void setValues(float a, float b) { m_width = a; m_height = b; }
+protected:
+    float m_width = 0, m_height = 0;
+};
+
+class Rectangle : public Polygon {
+public:
+    virtual float getArea() { return m_width * m_height; }
+};
+
+class Triangle : public Polygon {
+public:
+    virtual float getArea() { return (m_width * m_height) / 2.0f; }
+};
+
+EULUNA_BEGIN_MANAGED_CLASS(Polygon)
+EULUNA_CLASS_MEMBER(Polygon, getArea)
+EULUNA_CLASS_MEMBER(Polygon, setValues)
+EULUNA_END()
+
+EULUNA_BEGIN_MANAGED_DERIVED_CLASS(Rectangle, "Polygon")
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new Rectangle; })
+EULUNA_CLASS_GENERIC_REFERENCE_HANDLERS(Rectangle)
+EULUNA_CLASS_MEMBER(Rectangle, getArea)
+EULUNA_END()
+
+EULUNA_BEGIN_MANAGED_DERIVED_CLASS(Triangle, "Polygon")
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new Triangle; })
+EULUNA_CLASS_GENERIC_REFERENCE_HANDLERS(Triangle)
+EULUNA_CLASS_MEMBER(Triangle, getArea)
+EULUNA_END()
+```
+
+Lua code:
+```lua
+local t = Triangle.new()
+t:setValues(2, 3)
+print(t:getArea()) -- 3
+
+local r = Rectangle.new()
+r:setValues(2, 3)
+print(r:getArea()) -- 6
 ```
 
 Recommendations

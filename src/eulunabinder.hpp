@@ -180,7 +180,6 @@ public:
         return *ret;
     }
 
-    template<class C>
     EulunaBinder::BinderManagedClass& managedClass(const std::string& name, const std::string& base = std::string()) {
         auto ret = new BinderManagedClass(name, base);
         m_binders.push_back(std::unique_ptr<Binder>(static_cast<Binder*>(ret)));
@@ -223,11 +222,12 @@ public:
 #define EULUNA_BEGIN_SINGLETON_CLASS_NAMED(name,klass,ptr) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().singletonClass(name, ptr)
 
 // bind managed C++ classes
-#define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(#klass)
-#define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(name)
-#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS(klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(#klass,base)
-#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS_NAMED(name,klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass<klass>(name,base)
+#define EULUNA_BEGIN_MANAGED_CLASS(klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass(#klass)
+#define EULUNA_BEGIN_MANAGED_CLASS_NAMED(name,klass) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass(name)
+#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS(klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass(#klass,base)
+#define EULUNA_BEGIN_MANAGED_DERIVED_CLASS_NAMED(name,klass,base) EulunaAutoBinder __euluna_binding_##klass([] { EulunaBinder::instance().managedClass(name,base)
 #define EULUNA_CLASS_REFERENCE_HANDLERS(use,release) .useHandler(use).releaseHandler(release)
+#define EULUNA_CLASS_GENERIC_REFERENCE_HANDLERS(klass) .releaseHandler<klass>([](EulunaInterface* lua, klass* obj) { lua->releaseObject(obj); delete obj; })
 
 // bind ending
 #define EULUNA_END() ;});

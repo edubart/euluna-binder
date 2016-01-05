@@ -217,6 +217,119 @@ TEST(Euluna, ManagedClass) {
     EXPECT_EQ(g_lua.stackSize(), 0);
     EXPECT_EQ(Dummy::getDummyCounter(), 0);
 }
+///////////////////////////
+class DummyBase {
+public:
+    DummyBase() { m_dummyBaseCounter++; }
+    virtual ~DummyBase() { m_dummyBaseCounter--; }
+
+    DummyBase(const Dummy&) = delete;
+    DummyBase& operator=(const DummyBase&) = delete;
+
+    void setFoo(const std::string& foo) { m_foo = foo; }
+    std::string getFoo() const { return m_foo; }
+
+    static DummyBase* create() { return new DummyBase; }
+    void destroy() {
+        g_lua.releaseObject(this);
+        delete this;
+    }
+
+    static int getBaseCounter() { return m_dummyBaseCounter; }
+
+private:
+    std::string m_foo;
+    static int m_dummyBaseCounter;
+};
+int DummyBase::m_dummyBaseCounter = 0;
+
+void __handleDummyBaseUse(EulunaInterface* lua, DummyBase *dummy) {
+    // nothing to do
+}
+void __handleDummyBaseRelease(EulunaInterface* lua, DummyBase *dummy) {
+    dummy->destroy();
+}
+EULUNA_BEGIN_MANAGED_CLASS(DummyBase)
+EULUNA_CLASS_REFERENCE_HANDLERS(__handleDummyBaseUse, __handleDummyBaseRelease)
+EULUNA_CLASS_STATIC(DummyBase, create)
+EULUNA_CLASS_MEMBER(DummyBase, destroy)
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new DummyBase; })
+EULUNA_CLASS_STATIC_NAMED_EX("delete", [](DummyBase *dummy) { dummy->destroy(); })
+EULUNA_CLASS_MEMBER(DummyBase, setFoo)
+EULUNA_CLASS_MEMBER(DummyBase, getFoo)
+EULUNA_END()
+
+class DummyDerived : public DummyBase {
+public:
+    DummyDerived() { m_dummyCounter++; }
+    ~DummyDerived() { m_dummyCounter--; }
+
+    void setBoo(const std::string& boo) { m_boo = boo; }
+    std::string getBoo() const { return m_boo; }
+
+    static DummyDerived* create() { return new DummyDerived; }
+    static int getDerivedCounter() { return m_dummyCounter; }
+
+private:
+    std::string m_boo;
+    static int m_dummyCounter;
+};
+int DummyDerived::m_dummyCounter = 0;
+
+void __handleDummyDerivedUse(EulunaInterface* lua, DummyDerived *dummy) {
+    // nothing to do
+}
+void __handleDummyDerivedRelease(EulunaInterface* lua, DummyDerived *dummy) {
+    dummy->destroy();
+}
+EULUNA_BEGIN_MANAGED_DERIVED_CLASS(DummyDerived, "DummyBase")
+EULUNA_CLASS_REFERENCE_HANDLERS(__handleDummyDerivedUse, __handleDummyDerivedRelease)
+EULUNA_CLASS_STATIC(DummyDerived, create)
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new DummyDerived; })
+EULUNA_CLASS_STATIC_NAMED_EX("delete", [](DummyDerived *dummy) { dummy->destroy(); })
+EULUNA_CLASS_MEMBER(DummyDerived, setBoo)
+EULUNA_CLASS_MEMBER(DummyDerived, getBoo)
+EULUNA_END()
+
+TEST(Euluna, ManagedDerivedClass) {
+    std::string script = R"(
+        local res = ''
+        local dummy
+
+        dummy = DummyDerived.create()
+        dummy:setBoo("hello")
+        res = res .. dummy:getBoo()
+        dummy:destroy()
+        dummy = nil
+
+        local dummy = DummyBase.new()
+        dummy:setFoo(" world")
+        res = res .. dummy:getFoo()
+        DummyBase.delete(dummy)
+        dummy = nil
+
+        dummy = DummyDerived.new()
+        dummy:setFoo("!")
+        res = res .. dummy:getFoo()
+        dummy.asd = "!!"
+        local b = dummy
+        res = res .. b.asd
+        b = nil
+        dummy = nil
+
+        DummyDerived.new()
+        DummyDerived.create()
+        DummyBase.new()
+        DummyBase.create()
+
+        return res
+    )";
+    EXPECT_EQ(g_lua.runBuffer<std::string>(script), "hello world!!!");
+    g_lua.collect();
+    EXPECT_EQ(g_lua.stackSize(), 0);
+    EXPECT_EQ(DummyBase::getBaseCounter(), 0);
+    EXPECT_EQ(DummyDerived::getDerivedCounter(), 0);
+}
 
 //////////////////////
 double mathex_lerp(double a, double b, double t) {
@@ -264,6 +377,41 @@ EULUNA_CLASS_MEMBER(Foo, setBoo)
 EULUNA_CLASS_MEMBER(Foo, getBoo)
 EULUNA_END()
 
+class Polygon {
+public:
+    virtual float getArea() = 0;
+    void setValues(float a, float b) { m_width = a; m_height = b; }
+protected:
+    float m_width = 0, m_height = 0;
+};
+
+class Rectangle : public Polygon {
+public:
+    virtual float getArea() { return m_width * m_height; }
+};
+
+class Triangle : public Polygon {
+public:
+    virtual float getArea() { return (m_width * m_height) / 2.0f; }
+};
+
+EULUNA_BEGIN_MANAGED_CLASS(Polygon)
+EULUNA_CLASS_MEMBER(Polygon, getArea)
+EULUNA_CLASS_MEMBER(Polygon, setValues)
+EULUNA_END()
+
+EULUNA_BEGIN_MANAGED_DERIVED_CLASS(Rectangle, "Polygon")
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new Rectangle; })
+EULUNA_CLASS_GENERIC_REFERENCE_HANDLERS(Rectangle)
+EULUNA_CLASS_MEMBER(Rectangle, getArea)
+EULUNA_END()
+
+EULUNA_BEGIN_MANAGED_DERIVED_CLASS(Triangle, "Polygon")
+EULUNA_CLASS_STATIC_NAMED_EX("new", []{ return new Triangle; })
+EULUNA_CLASS_GENERIC_REFERENCE_HANDLERS(Triangle)
+EULUNA_CLASS_MEMBER(Triangle, getArea)
+EULUNA_END()
+
 TEST(Euluna, Examples) {
     // create a new lua state
     auto L = luaL_newstate();
@@ -276,5 +424,10 @@ TEST(Euluna, Examples) {
     EXPECT_EQ(euluna.runBuffer<std::string>("return concat('hello',' world!')"), "hello world!");
     EXPECT_EQ(euluna.runBuffer<std::string>("return stringutil.concat('hello',' world!')"), "hello world!");
     EXPECT_EQ(euluna.runBuffer<std::string>("foo.setBoo('hello world!') return foo.getBoo()"), "hello world!");
+    EXPECT_EQ(euluna.runBuffer<float>("local a = Rectangle.new(); a:setValues(2,3); return a:getArea()"), 6.0f);
+    EXPECT_EQ(euluna.runBuffer<float>("local a = Triangle.new(); a:setValues(2,3); return a:getArea()"), 3.0f);
     EXPECT_EQ(g_lua.stackSize(), 0);
 }
+
+//////////////////////
+
