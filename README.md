@@ -41,14 +41,19 @@ Requeriments
 - C++ ABI for demangling class names
 - RTTI enabled
 
+Limitations
+-----------
+
+- Multiple inheritance is not supported
+
+
 Features
 -----------
 
-- Bind almost any kind of C++ object to lua
+- Bind C++ classes to lua
 - Seamless binding of std::function to/from lua functions
 - Simple signal/slot system for emitting events to lua
 - Lua exception safe
-- EulunaStruct
 - Bind shared objects to lua using any kind of smart pointer
 - Bind copyable objects to lua
 - Bind raw pointer objects to lua
@@ -68,7 +73,7 @@ std::string string_concat(const std::string& a, const std::string& b) {
     return a + b;
 }
 
-EULUNA_BEGIN_GLOBAL_FUNCTIONS()
+EULUNA_BEGIN_GLOBAL_FUNCTIONS(myglobals)
 EULUNA_FUNC_NAMED("concat", string_concat)
 EULUNA_END()
 ```
@@ -89,7 +94,7 @@ std::string concat(const std::string& a, const std::string& b) {
 }
 }
 
-EULUNA_BEGIN_SINGLETON("stringutil")
+EULUNA_BEGIN_SINGLETON(stringutil)
 EULUNA_SINGLETON_FUNC_NAMED("concat", stringutil::concat);
 EULUNA_END()
 ```
@@ -130,11 +135,9 @@ foo.setBoo('hello world!')
 print(foo.getBoo()) -- hello world!
 ```
 
-### Class with user managed memory (no smart pointers)
+### Class with user managed memory
 
-This kind of class should be used with care,
-the user is reponsible for mantaining the class memory valid
-and collecting its C++/lua memory.
+The user is reponsible for mantaining the class memory valid and deleting it when appropriated.
 
 C++ code:
 ```cpp
@@ -148,11 +151,16 @@ private:
     std::string m_boo;
 };
 
+// called just once when lua starts to hold a reference to this object
 void __handleDummyUse(EulunaInterface* lua, Dummy *dummy) {
-    // nothing to do
+    // nothing to do, object will be deleted on the release handler
 }
+
+// called just once when the lua holds no reference to this object anymore
 void __handleDummyRelease(EulunaInterface* lua, Dummy *dummy) {
+    // release object lua table, must always be called before deleting
     lua->releaseObject(dummy);
+    // delete object memory
     delete dummy;
 }
 
@@ -247,10 +255,5 @@ TODO
 ### Setting and getting object lua fields
 TODO
 
-Recommendations
--------------------------
-
-- Use a single global lua state
-- Use shared objects with smart pointers
 
 
