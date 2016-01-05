@@ -177,6 +177,7 @@ C++ code:
 ```cpp
 class Polygon {
 public:
+    virtual ~Polygon() { }
     virtual float getArea() = 0;
     void setValues(float a, float b) { m_width = a; m_height = b; }
 protected:
@@ -221,6 +222,30 @@ local r = Rectangle.new()
 r:setValues(2, 3)
 print(r:getArea()) -- 6
 ```
+
+### Calling global lua functions
+
+Lua code:
+```lua
+function helloWorld(str)
+  return 'hello ' .. str
+end
+myfuncs = { hello = helloWorld }
+```
+
+C++ code:
+```cpp
+euluna.runScript("luascript.lua") // load and run the above script
+// both lines will output "hello world!"
+std::cout << euluna.callGlobal<std::string>("helloWorld", "world!") << std::endl;
+std::cout << euluna.callGlobalField<std::string>("myfuncs", "hello", "world!") << std::endl;
+```
+
+### Calling object lua functions
+TODO
+
+### Setting and getting object lua fields
+TODO
 
 Recommendations
 -------------------------

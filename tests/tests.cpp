@@ -379,6 +379,7 @@ EULUNA_END()
 
 class Polygon {
 public:
+    virtual ~Polygon() { }
     virtual float getArea() = 0;
     void setValues(float a, float b) { m_width = a; m_height = b; }
 protected:
@@ -426,6 +427,22 @@ TEST(Euluna, Examples) {
     EXPECT_EQ(euluna.runBuffer<std::string>("foo.setBoo('hello world!') return foo.getBoo()"), "hello world!");
     EXPECT_EQ(euluna.runBuffer<float>("local a = Rectangle.new(); a:setValues(2,3); return a:getArea()"), 6.0f);
     EXPECT_EQ(euluna.runBuffer<float>("local a = Triangle.new(); a:setValues(2,3); return a:getArea()"), 3.0f);
+    euluna.runBuffer(R"(
+        function helloWorld(str)
+          return 'hello ' .. str
+        end
+        myfuncs = { hello = helloWorld })"
+    );
+    EXPECT_EQ(euluna.callGlobal<std::string>("helloWorld", "world!"), "hello world!");
+    EXPECT_EQ(euluna.callGlobalField<std::string>("myfuncs", "hello", "world!"), "hello world!");
+    EXPECT_EQ(g_lua.stackSize(), 0);
+}
+
+TEST(Euluna, CallLuaFunctions) {
+    g_lua.runBuffer("function helloWorld() return 'hello world!!!' end");
+    g_lua.runBuffer("globals = {}; function globals.helloWorld() return 'hello world!!!' end");
+    EXPECT_EQ(g_lua.callGlobal<std::string>("helloWorld"), "hello world!!!");
+    EXPECT_EQ(g_lua.callGlobalField<std::string>("globals", "helloWorld"), "hello world!!!");
     EXPECT_EQ(g_lua.stackSize(), 0);
 }
 

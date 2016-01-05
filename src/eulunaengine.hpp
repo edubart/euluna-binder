@@ -161,9 +161,71 @@ public:
         setGlobal(functionName);
     }
 
-    // aliases
-    template<typename R>
-    R runBuffer(const std::string& buffer, const std::string& source = "") { return polymorphicSafeDoBuffer<R>(buffer, source); }
+    // functions that can throw exceptions
+    template<typename R = void>
+    R safeRunBuffer(const std::string& buffer, const std::string& source = "") {
+        return polymorphicSafeDoBuffer<R>(buffer, source);
+    }
+
+    template<typename R = void, typename... T>
+    R safeCallGlobal(const std::string& name, const T&... args) {
+        getGlobal(name);
+        if(isNil()) { // silent return
+            pop();
+            return R();
+        }
+        return polymorphicSafeCall<R>(args...);
+    }
+
+    template<typename R = void, typename... T>
+    R safeCallGlobalField(const std::string& global, const std::string& field, const T&... args) {
+        getGlobalField(global, field);
+        if(isNil()) { // silent return
+            pop();
+            return R();
+        }
+        return polymorphicSafeCall<R>(args...);
+    }
+
+    // functions that instead if throwing exception will set last error string
+    template<typename R = void>
+    R runBuffer(const std::string& buffer, const std::string& source = "") {
+        m_lastError.clear();
+        try {
+            return safeRunBuffer<R>(buffer, source);
+        } catch(std::exception& e) {
+            m_lastError = e.what();
+            return R();
+        }
+    }
+
+    template<typename R = void, typename... T>
+    R callGlobal(const std::string& name, const T&... args) {
+        m_lastError.clear();
+        try {
+            return safeCallGlobal<R>(name, args...);
+        } catch(std::exception& e) {
+            m_lastError = e.what();
+            return R();
+        }
+    }
+
+    template<typename R = void, typename... T>
+    R callGlobalField(const std::string& name, const T&... args) {
+        m_lastError.clear();
+        try {
+            return safeCallGlobalField<R>(name, args...);
+        } catch(std::exception& e) {
+            m_lastError = e.what();
+            return R();
+        }
+    }
+
+    std::string getLastError() { return m_lastError; }
+    bool hasError() { return !m_lastError.empty(); }
+
+private:
+    std::string m_lastError;
 };
 
 #endif // EULUNAENGINE_HPP

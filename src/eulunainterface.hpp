@@ -319,6 +319,14 @@ public:
             assert(isTable());
         }
     }
+    void getGlobalField(const std::string& global, const std::string& field) {
+        getGlobal(global);
+        if(!isNil()) {
+            assert(isTable() || isUserdata());
+            getField(field);
+            remove(-2);
+        }
+    }
 
     // pop functions
     void pop(int n = 1) { lua_pop(L, n); }
@@ -467,7 +475,7 @@ public:
     int polymorphicPush() { return 0; }
 
     template<typename R>
-    R polymorphicPop() {
+    typename std::enable_if<!std::is_void<R>::value, R>::type polymorphicPop() {
         R ret;
         if(!polymorphicPull(ret)) {
             traceback(euluna_tools::format("bad argument or return (%s expected, got %s)", euluna_tools::demangle_type<R>(), toTypeName()));
@@ -476,6 +484,11 @@ public:
         } else
             pop();
         return ret;
+    }
+
+    template<typename R>
+    typename std::enable_if<std::is_void<R>::value, R>::type polymorphicPop() {
+        pop();
     }
 
     template<class T>
